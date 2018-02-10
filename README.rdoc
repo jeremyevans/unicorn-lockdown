@@ -1,0 +1,212 @@
+= unicorn-lockdown
+
+unicorn-lockdown is a helper library for running Unicorn on OpenBSD in a way
+that supports security features such as chroot, privdrop, fork+exec,
+and pledge.
+
+With the configuration unicorn-lockdown uses, the unicorn process executes as root,
+and the unicorn master process continues to run as root.  The master process
+forks worker processes, which re-exec (fork+exec) so that a new memory layout
+is used in each worker process.  The work process then loads the application,
+after which it chroot's to the application's directory, drops root privileges
+and then runs as the application user (privdrop), then runs pledge to limit
+the allowed system calls to the minimum required to run the application.
+
+== Assumptions
+
+unicorn-lockdown assumes you are using OpenBSD 6.2+ with the nginx and
+rubyXY-unicorn packages installed, and that you have a unicorn symlink in
+the PATH to the appropriate unicornXY executable.
+
+It also assumes you have a SMTP server listening on localhost port 25 to
+receive notification emails of worker crashes, if you are notifying for those.
+
+== Usage
+
+=== unicorn-lockdown-setup
+
+To start the process of setting up your system to use unicorn-lockdown, run
+the following as root after reading the file and understanding what it does.
+
+  unicorn-lockdown-setup
+
+Briefly, the configuration this uses the following directories:
+
+/var/www/sockets :: Stores unix sockets that Unicorn listens on and Nginx uses.
+/var/www/requests :: Stores temporary files for each request with request info,
+                     used for crash notifications
+/var/log/unicorn :: Stores unicorn log files, one per application
+/var/log/nginx :: Stores nginx log files, two per application, one for access
+                  and one for errors
+
+This adds a _unicorn group that all per-application users will use as their
+group, as well as a /etc/rc.d/rc.unicorn file that the per application
+/etc/rc.d/unicorn_* files will use.
+
+=== unicorn-lockdown-add
+
+For each application you want to run with unicorn lockdown, run the following
+as root, again after reading the file and understanding what it does:
+
+  unicorn-lockdown-add
+
+Here's an excerpt of the usage:
+
+  Usage: unicorn-lockdown-add [options] app_name
+  Options:
+      -c     rackup_file   rackup configuration file
+      -d     dir           application directory name
+      -f     unicorn_file  unicorn configuration file relative to application directory
+      -o     owner         operating system application owner
+      -u     user          operating system user to run application
+      --uid  uid           user id to use if creating the user when -U is specified
+
+It is a very good idea to specify -o and -u, the other options can be ignored
+if you are OK with the default values.  The owner (-o) and the user (-u) should be
+different.  The user is the user the application runs as, and should have very limited
+access to the application directory.  The owner is the user that owns the application
+directory and can make modifications to the application.
+
+=== unicorn-lockdown
+
+unicorn-lockdown is the library required in your unicorn configuration
+file for the application, to handle configuring unicorn to run the app
+with chroot, privdrop, fork+exec, and pledge.
+
+When you run unicorn-lockdown-add, it will create the unicorn configuration
+file for the app if one does not already exist, looking similar to:
+
+  require 'unicorn-lockdown'
+
+  Unicorn.lockdown(self,
+    :app=>"app_name",
+    :user=>"user_name", # Set application user here
+    :pledge=>'rpath prot_exec inet unix' # More may be needed
+    :email=>'root' # update this with correct email
+  )
+
+Unicorn.lockdown options:
+
+:app :: (required) a short string for the name of the application, used
+        for socket/log file names and in notifications
+:user :: (required) the user to drop privileges to
+:pledge :: (optional) a pledge string to limit the allowed system calls
+           after privileges have been dropped
+:email :: (optional) an email address to use for notifications when the
+          worker process crashes or an unhandled exception is raised by
+          the application or middleware.
+
+With this example pledge:
+
+* rpath is needed to read files in the chrooted file system
+* prot_exec is needed in most cases
+* unix is needed for the unix socket to nginx
+* inet is not needed in all cases, but in most applications need some form
+  of network access.  pf (OpenBSD's firewall) should be used to limit
+  access for the application's operating system to the minimum necessary
+  access needed.
+
+unicorn-lockdown has specific support for allowing for emails to be sent
+for Unicorn worker crashes (e.g. pledge violations). It also has support
+for using rack-unreloader to run your application in development mode
+under the chroot while allowing for reloading files if they are modified.
+Additionally, unicorn-lockdown modifies unicorn's process status line in a
+way that allows it to be controllable via OpenBSD's rcctl program for
+stopping/starting/reloading/restarting daemons.
+
+By default, Unicorn.lockdown limits the client_body_buffer_size to 11MB,
+with the expectation of an Nginx limit of 10MB, such that all client
+requests will be buffered in memory and unicorn will not need to write
+temporary files to disk.  If this limit is not correct for your
+application, please call client_body_buffer_size after calling
+Unicorn.lockdown to set an appropriate limit.
+
+When Unicorn.lockdown is used with the :email option, if the worker
+process crashes, it will email the address using the contents specified
+by the request file.  To make sure there is useful information to email
+in the case of a crash, you need to populate the request information for
+all requests.  If you are using Roda, one way to do this is to use the
+error_email or error_mail plugins:
+
+  plugin :error_email, :from=>'foo@example.com', :to=>'foo@example.com',
+    :prefix=>'[app_name]'
+  # or
+  plugin :error_mail, :from=>'foo@example.com', :to=>'foo@example.com',
+    :prefix=>'[app_name]'
+
+and then at the top of the route block, do:
+
+  if defined?(Unicorn) && Unicorn.respond_to?(:write_request)
+    Unicorn.write_request(error_email_content("Unicorn Worker Process Crash"))
+  end
+
+If you don't have useful information in the request file, an email will
+still be sent for notification purposes, but it will include request
+related information, which could make it difficult to diagnose the
+underlying problem.
+
+=== roda-pg_disconnect
+
+If you are using PostgreSQL as the database for the application, and using
+unix sockets to connect the application to the database, if the database
+is restarted, the application will no longer be able to connect to it.  The
+only way to fix this is to kill the worker process and have the master
+process spawn a new worker.  The roda-pg_disconnect plugin is a plugin
+for the roda web toolkit to kill the worker if it detects the database
+connection has been lost.  This plugin assumes the use of the Sequel database
+library and postgres adapter with the pg driver.
+
+In your Roda application:
+
+  # Sometime before loading the error_handler plugin
+  plugin :pg_disconnect
+
+=== rack-email_exceptions
+
+rack-email_exceptions is a rack middleware designed to be the first
+middleware loaded into applications.  It rescues unhandled exceptions
+raised by subsequent middleware or the application itself.
+
+Unicorn.lockdown will automatically setup this middleware if the :email
+option is used and the RACK_ENV environment variable is set to production,
+such that it wraps the application and all other middleware.
+
+It is possible to use this middleware manually:
+
+  require 'rack/email_exceptions'
+  use Rack::EmailExceptions, "app_name", 'foo@example.com'
+
+=== chrooter
+
+chrooter is a library designed to help with testing applications both in
+chroot mode and non-chroot mode.  If you are running your application
+chrooted, you must support testing while chrooted otherwise it is very
+difficult to find problems that only occur when chrooted before putting
+the application into production, such as a file being read from outside
+the chroot.
+
+chrooter assumes you are using minitest for testing.  To use chrooter:
+
+  require 'minitest/autorun'
+  require 'chrooter'
+  at_exit{Chrooter.chroot('user_name', 'rpath prot_exec inet unix')}
+
+If you run your specs as a regular user, it will execute them without
+chrooting, but in a way that can still catch some problems that occur
+when chrooted.  If you run your specs as root, it will chroot to
+the current directory after loading the specs, then drop
+privileges to the user given (and optionally pledging using the given
+pledge string), then run the specs.
+
+== autoload
+
+As you'll find out if you try to run your applications with chroot,
+autoload is the enemy.  Both unicorn-lockdown and chrooter have support
+for handling common autoloaded constants in the rack and mail gems.
+If you use other gems that use autoload, you'll have to add code that
+references the autoloaded constants after the application is loaded but
+before chrooting.
+
+== Author
+
+Jeremy Evans <code@jeremyevans.net>

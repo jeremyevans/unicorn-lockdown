@@ -1,0 +1,217 @@
+#!/usr/bin/env ruby
+
+require 'etc'
+require 'optparse'
+
+def sh(*args)
+  puts "Running: #{args.join(' ')}"
+  system(*args) || raise("Error while running: #{args.join(' ')}")
+end
+
+unicorn = ''
+rackup = ''
+unicorn_file = 'unicorn.conf'
+dir = nil
+user = nil
+new_user_uid = nil
+owner = nil
+owner_uid = nil
+owner_gid = nil
+
+options = OptionParser.new do |opts|
+  opts.banner = "Usage: unicorn-lockdown-add [options] app_name"
+  opts.separator "Options:"
+
+  opts.on_tail("-h", "-?", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+
+  opts.on("-c rackup_file", "rackup configuration file") do |v|
+    rackup = "rackup_file=#{v}\n"
+  end
+
+  opts.on("-d dir", "application directory name") do |v|
+    dir = v
+  end
+
+  opts.on("-f unicorn_file", "unicorn configuration file relative to application directory") do |v|
+    unicorn_file = v
+    unicorn = "unicorn_conf=#{v}\n"
+  end
+
+  opts.on("-o owner", "operating system application owner") do |v|
+    owner = v
+    ent = Etc.getpwnam(v)
+    owner_uid = ent.uid
+    owner_gid = ent.gid
+  end
+
+  opts.on("-u user", "operating system user to run application") do |v|
+    user = v
+  end
+
+  opts.on("--uid uid", "user id to use if creating the user when -U is specified") do |v|
+    new_user_uid = Integer(v, 10)
+  end
+end
+options.parse!
+
+app = ARGV.shift
+dir ||= app
+base_dir = dir
+
+root_id = 0
+bin_id = 7
+www_id = 67
+
+www_root = '/var/www'
+dir = "#{www_root}/#{dir}"
+etc_dir = "#{dir}/etc"
+hosts_file = "#{etc_dir}/hosts"
+resolv_file = "#{etc_dir}/resolv.conf"
+rc_file = "/etc/rc.d/unicorn_#{app.tr('-', '_')}"
+nginx_file = "/etc/nginx/#{app}.conf"
+unicorn_conf_file = "#{dir}/#{unicorn_file}"
+unicorn_log_file = "/var/log/unicorn/#{app}.log"
+nginx_access_log_file = "/var/log/nginx/#{app}.access.log"
+nginx_error_log_file = "/var/log/nginx/#{app}.error.log"
+
+# Add application user if it doesn't exist
+if user
+  passwd = begin
+    Etc.getpwnam(user)
+  rescue ArgumentError
+    args = ['/usr/sbin/useradd', '-d', '/var/empty', '-g', '=uid', '-G', '_unicorn', '-L', 'daemon', '-s', '/sbin/nologin']
+    if new_user_uid
+      args << '-u' << new_user_uid.to_s
+    end
+    args << user
+    sh(*args)
+    Etc.getpwnam(user)
+  end
+  app_uid = passwd.uid
+end
+
+# Create application directory and chroot directories if they doesn't exist
+[dir, "#{dir}/var", "#{dir}/var/www", "#{dir}/etc", "#{dir}/public"].each do |d|
+  unless File.directory?(d)
+    puts "Creating #{d}"
+    Dir.mkdir(d)
+    File.chmod(0755, d)
+    File.chown(owner_uid, owner_gid, d) if owner
+  end
+end
+
+# DRY up file ownership code
+setup_file_owner = lambda do |file|
+  File.chmod(0644, file)
+  File.chown(owner_uid, owner_gid, file) if owner
+end
+
+# Setup symlink to root so that the same paths work both when
+# chrooted and when not chrooted.
+chroot_link = "#{dir}#{dir}"
+unless File.symlink?(chroot_link)
+  puts "Creating #{chroot_link}"
+  File.symlink('/', chroot_link)
+end
+
+# Add /etc/hosts files to chroot
+unless File.file?(hosts_file)
+  puts "Creating #{hosts_file}"
+  File.binwrite(hosts_file, <<END)
+127.0.0.1 localhost
+END
+  setup_file_owner.call(hosts_file)
+end
+
+# Add /etc/resolv.conf files to chroot
+unless File.file?(resolv_file)
+  puts "Creating #{resolv_file}"
+  File.binwrite(resolv_file, <<END)
+lookup file
+END
+  setup_file_owner.call(resolv_file)
+end
+
+# Setup unicorn configuration file
+unless File.file?(unicorn_conf_file)
+  puts "Creating #{unicorn_conf_file}"
+  File.binwrite(unicorn_conf_file, <<END)
+require 'unicorn-lockdown'
+
+Unicorn.lockdown(self,
+  :app=>#{app.inspect},
+  :user=>#{user.inspect}, # Set application user here
+  :pledge=>'rpath prot_exec inet unix', # More may be needed
+  :email=>'root' # update this with correct email
+)
+END
+  setup_file_owner.call(unicorn_conf_file)
+end
+
+# Setup /etc/nginx/* file for nginx configuration
+unless File.file?(nginx_file)
+  puts "Creating #{nginx_file}"
+  File.binwrite(nginx_file, <<END)
+upstream #{app}_unicorn {
+    server unix:/sockets/#{app}.sock fail_timeout=0;
+}
+server {
+    server_name #{app};
+    access_log #{nginx_access_log_file} main;
+    error_log #{nginx_error_log_file} warn;
+    root #{dir}/public;
+    error_page   500 503 /500.html;
+    error_page   502 504 /502.html;
+    proxy_set_header  X-Real-IP  $remote_addr;
+    proxy_set_header  X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header  Host $http_host;
+    proxy_redirect    off;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-Frame-Options deny;
+    add_header X-XSS-Protection "1; mode=block";
+    try_files $uri @#{app}_unicorn;
+    location @#{app}_unicorn {
+        proxy_pass http://#{app}_unicorn;
+    }
+}
+END
+
+  setup_file_owner.call(nginx_file)
+end
+
+# Setup nginx log file
+[nginx_access_log_file, nginx_error_log_file].each do |f|
+  unless File.file?(f)
+    puts "Creating #{f}"
+    File.binwrite(f, '')
+    File.chmod(0644, f)
+    File.chown(www_id, root_id, f)
+  end
+end
+
+# Setup unicorn log file
+unless File.file?(unicorn_log_file)
+  puts "Creating #{unicorn_log_file}"
+  File.binwrite(unicorn_log_file, '')
+  File.chmod(0640, unicorn_log_file)
+  File.chown(app_uid, app_uid, unicorn_log_file) if app_uid
+end
+
+# Setup /etc/rc.d/unicorn_* file for daemon management
+unless File.file?(rc_file)
+  puts "Creating #{rc_file}"
+  File.binwrite(rc_file, <<END)
+#!/bin/ksh
+
+unicorn_app=#{app}
+unicorn_dir=#{dir}
+#{unicorn}#{rackup} 
+. /etc/rc.d/rc.unicorn
+END
+
+  File.chmod(0755, rc_file)
+  File.chown(root_id, bin_id, rc_file)
+end
