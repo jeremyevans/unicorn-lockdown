@@ -103,8 +103,8 @@ With this example pledge:
 * unix is needed for the unix socket to nginx
 * inet is not needed in all cases, but in most applications need some form
   of network access.  pf (OpenBSD's firewall) should be used to limit
-  access for the application's operating system to the minimum necessary
-  access needed.
+  access for the application's operating system user to the minimum
+  necessary access needed.
 
 unicorn-lockdown has specific support for allowing for emails to be sent
 for Unicorn worker crashes (e.g. pledge violations). It also has support
@@ -141,7 +141,7 @@ and then at the top of the route block, do:
   end
 
 If you don't have useful information in the request file, an email will
-still be sent for notification purposes, but it will include request
+still be sent for notification purposes, but it will not include request
 related information, which could make it difficult to diagnose the
 underlying problem.
 
