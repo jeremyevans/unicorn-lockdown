@@ -1,0 +1,9 @@
+= 0.10.0 (2018-05-21)
+
+* Use Mail.eager_autoload! if using the mail gem (jeremyevans)
+
+* Add bin files to gemspec (jeremyevans)
+
+= 0.9.0 (2018-05-02)
+
+* Initial public release
