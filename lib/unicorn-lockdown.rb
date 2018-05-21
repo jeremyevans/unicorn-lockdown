@@ -133,12 +133,10 @@ class << Unicorn
         # that are probably needed at runtime.  This must be done
         # before chrooting as attempting to load the constants after
         # chrooting will break things.
-        #
-        # This part is the most prone to breakage, as new versions
-        # of the rack or mail libraries (or new libraries that
-        # use autoload) could break things, as well as existing
-        # applications using new features at runtime that were
-        # not loaded at load time.
+        
+        # Start with rack, which uses autoload for all constants.
+        # Most of rack's constants are not used at runtime, this
+        # lists the ones most commonly needed.
         Rack::Multipart
         Rack::Multipart::Parser
         Rack::Multipart::Generator
@@ -150,17 +148,13 @@ class << Unicorn
           Rack::Lint
           Rack::ShowExceptions
         end
+
+        # If using the mail library, eagerly autoload all constants.
+        # This costs about 9MB of memory, but the mail gem changes
+        # their autoloaded constants on a regular basis, so it's
+        # better to be safe than sorry.
         if defined?(Mail)
-          Mail::Address
-          Mail::AddressList
-          Mail::Parsers::AddressListsParser
-          Mail::ContentTransferEncodingElement
-          Mail::ContentDispositionElement
-          Mail::MessageIdsElement
-          Mail::MimeVersionElement
-          Mail::OptionalField
-          Mail::ContentTypeElement
-          Mail::SMTP
+          Mail.eager_autoload!
         end
 
         # Strip path prefixes from the reloader.  This is only
