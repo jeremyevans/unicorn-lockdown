@@ -8,7 +8,9 @@ spec = Gem::Specification.new do |s|
   s.homepage= 'https://github.com/jeremyevans/unicorn-lockdown'
   s.email = "code@jeremyevans.net"
   s.license = "MIT"
-  s.files = ['README.rdoc', 'MIT-LICENSE'] + Dir['files/*'] + Dir['lib/**/*.rb']
+  s.files = ['README.rdoc', 'MIT-LICENSE'] + Dir['bin/*'] + Dir['files/*'] + Dir['lib/**/*.rb']
+  s.bindir = 'bin'
+  s.executables << 'unicorn-lockdown-add' << 'unicorn-lockdown-setup'
 
   s.add_dependency("pledge")
   s.add_dependency("unicorn")
