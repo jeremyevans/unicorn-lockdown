@@ -137,6 +137,13 @@ end
 
 # Setup unicorn configuration file
 unless File.file?(unicorn_conf_file)
+  unicorn_conf_dir = File.dirname(unicorn_conf_file)
+  unless File.directory?(unicorn_conf_dir)
+    puts "Creating #{unicorn_conf_dir}"
+    Dir.mkdir(unicorn_conf_dir)
+    File.chmod(0755, unicorn_conf_dir)
+    File.chown(owner_uid, owner_gid, unicorn_conf_dir) if owner
+  end
   puts "Creating #{unicorn_conf_file}"
   File.binwrite(unicorn_conf_file, <<END)
 require 'unicorn-lockdown'
