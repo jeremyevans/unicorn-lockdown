@@ -30,6 +30,16 @@ class Roda
           Process.kill(:QUIT, $$)
           raise
         end
+
+        # When database connection is lost, kill the worker process, so a new one will be generated.
+        # This is necessary because the unix socket used by the database connection is no longer available
+        # once the application is chrooted.
+        def _roda_handle_main_route
+          super
+        rescue Sequel::DatabaseDisconnectError, Sequel::DatabaseConnectionError, PG::ConnectionBad
+          Process.kill(:QUIT, $$)
+          raise
+        end
       end
     end
 

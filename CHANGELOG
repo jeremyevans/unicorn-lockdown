@@ -1,3 +1,7 @@
+= master
+
+* Make Roda pg_disconnect plugin support new Roda dispatch API (jeremyevans)
+
 = 0.10.0 (2018-05-21)
 
 * Use Mail.eager_autoload! if using the mail gem (jeremyevans)
