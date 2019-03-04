@@ -1,5 +1,7 @@
 = master
 
+* Support separate log group and process primary group on Unicorn 5.5.0+ using :group option (jeremyevans)
+
 * Make Roda pg_disconnect plugin support new Roda dispatch API (jeremyevans)
 
 = 0.10.0 (2018-05-21)

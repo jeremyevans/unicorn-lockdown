@@ -49,8 +49,12 @@ class << Unicorn
   # to enable programmers to debug and fix the issue.
   attr_accessor :request_logger
 
-  # The user and group name to run as.
+  # The user to run as. Also specifies the group to run as if group_name is not set.
   attr_accessor :user_name
+
+  # The group name to run as.  Can be an array of two strings, where the first string
+  # is the primary group, and the second string is the group used for the log files.
+  attr_accessor :group_name
 
   # The pledge string to use.
   attr_accessor :pledge
@@ -77,11 +81,15 @@ class << Unicorn
   # Options:
   # :app :: The name of the application (required)
   # :email : The email to notify for worker crashes
-  # :user :: The user/group to run as (required)
+  # :user :: The user to run as (required)
+  # :group :: The group to run as (if not set, uses :user as the group).
+  #           Can be an array of two strings, where the first string is the primary
+  #           group, and the second string is the group used for the log files.
   # :pledge :: The string to use when pledging
   def lockdown(configurator, opts)
     Unicorn.app_name = opts.fetch(:app)
     Unicorn.user_name = opts.fetch(:user)
+    Unicorn.group_name = opts[:group] || opts[:user]
     Unicorn.email = opts[:email]
     Unicorn.pledge = opts[:pledge]
 
@@ -164,7 +172,7 @@ class << Unicorn
 
         # Drop privileges.  This must be done after chrooting as
         # chrooting requires root privileges.
-        worker.user(Unicorn.user_name, Unicorn.user_name, pwd)
+        worker.user(Unicorn.user_name, Unicorn.group_name, pwd)
 
         if Unicorn.pledge
           # Pledge after dropping privileges, because dropping
@@ -222,7 +230,9 @@ class << Unicorn
 
                 # Then get information from /etc and drop group privileges
                 uid = Etc.getpwnam(Unicorn.user_name).uid
-                gid = Etc.getgrnam(Unicorn.user_name).gid
+                group = Unicorn.group_name
+                group = group.first if group.is_a?(Array)
+                gid = Etc.getgrnam(group).gid
                 if gid && Process.egid != gid
                   Process.initgroups(Unicorn.user_name, gid)
                   Process::GID.change_privilege(gid)
