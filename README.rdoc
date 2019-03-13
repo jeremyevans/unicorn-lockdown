@@ -7,8 +7,8 @@ and pledge.
 With the configuration unicorn-lockdown uses, the unicorn process executes as root,
 and the unicorn master process continues to run as root.  The master process
 forks worker processes, which re-exec (fork+exec) so that a new memory layout
-is used in each worker process.  The work process then loads the application,
-after which it chroot's to the application's directory, drops root privileges
+is used in each worker process.  The worker process then loads the application,
+after which it chroots to the application's directory, drops root privileges
 and then runs as the application user (privdrop), then runs pledge to limit
 the allowed system calls to the minimum required to run the application.
 
@@ -90,6 +90,10 @@ Unicorn.lockdown options:
 :app :: (required) a short string for the name of the application, used
         for socket/log file names and in notifications
 :user :: (required) the user to drop privileges to
+:group :: (optional) the group to use to run the application.  On Unicorn
+          5.5.0+, can be an array with two entries, the first used as the
+          process primary group, the second as the owner of the unicorn
+          log files.
 :pledge :: (optional) a pledge string to limit the allowed system calls
            after privileges have been dropped
 :email :: (optional) an email address to use for notifications when the
