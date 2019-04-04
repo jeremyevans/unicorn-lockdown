@@ -149,12 +149,19 @@ class << Unicorn
         Rack::Multipart::Parser
         Rack::Multipart::Generator
         Rack::Multipart::UploadedFile
-        Rack::CommonLogger
         Rack::Mime
         Rack::Auth::Digest::Params
-        if ENV['RACK_ENV'] == 'development'
+
+        # In the development environment, reference all middleware
+        # the unicorn will load by default, unless unicorn is
+        # set to not load middleware by default.
+        if ENV['RACK_ENV'] == 'development' && (!respond_to?(:set) || set[:default_middleware] != false)
+          Rack::ContentLength
+          Rack::CommonLogger
+          Rack::Chunked
           Rack::Lint
           Rack::ShowExceptions
+          Rack::TempfileReaper
         end
 
         # If using the mail library, eagerly autoload all constants.
