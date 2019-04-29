@@ -1,6 +1,6 @@
 spec = Gem::Specification.new do |s|
   s.name = 'unicorn-lockdown'
-  s.version = '0.11.0'
+  s.version = '0.12.0'
   s.platform = Gem::Platform::RUBY
   s.summary = "Helper library for running Unicorn with chroot/privdrop/fork+exec/pledge on OpenBSD"
   s.author = "Jeremy Evans"
