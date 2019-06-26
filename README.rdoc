@@ -1,16 +1,17 @@
 = unicorn-lockdown
 
 unicorn-lockdown is a helper library for running Unicorn on OpenBSD in a way
-that supports security features such as chroot, privdrop, fork+exec,
+that supports security features such as chroot (or unveil), privdrop, fork+exec,
 and pledge.
 
 With the configuration unicorn-lockdown uses, the unicorn process executes as root,
 and the unicorn master process continues to run as root.  The master process
 forks worker processes, which re-exec (fork+exec) so that a new memory layout
 is used in each worker process.  The worker process then loads the application,
-after which it chroots to the application's directory, drops root privileges
-and then runs as the application user (privdrop), then runs pledge to limit
-the allowed system calls to the minimum required to run the application.
+after which it chroots to the application's directory (or uses unveil to limit
+file system permissions), drops root privileges and then runs as the application
+user (privdrop), then runs pledge to limit the allowed system calls to the minimum
+required to run the application.
 
 == Assumptions
 
@@ -20,6 +21,11 @@ the PATH to the appropriate unicornXY executable.
 
 It also assumes you have a SMTP server listening on localhost port 25 to
 receive notification emails of worker crashes, if you are notifying for those.
+
+If using unveil instead of chroot to limit file system access, you must be
+using OpenBSD 6.6+ (or 6.5-current after July 2019), one of the OpenBSD Ruby
+ports with backported support for unveil to work correctly with +File.realpath+,
+and version 1.2.0+ of the pledge gem.
 
 == Usage
 
@@ -71,7 +77,7 @@ directory and can make modifications to the application.
 
 unicorn-lockdown is the library required in your unicorn configuration
 file for the application, to handle configuring unicorn to run the app
-with chroot, privdrop, fork+exec, and pledge.
+with chroot (or unveil), privdrop, fork+exec, and pledge.
 
 When you run unicorn-lockdown-add, it will create the unicorn configuration
 file for the app if one does not already exist, looking similar to:
@@ -81,7 +87,7 @@ file for the app if one does not already exist, looking similar to:
   Unicorn.lockdown(self,
     :app=>"app_name",
     :user=>"user_name", # Set application user here
-    :pledge=>'rpath prot_exec inet unix' # More may be needed
+    :pledge=>'rpath prot_exec inet unix', # More may be needed
     :email=>'root' # update this with correct email
   )
 
@@ -96,6 +102,13 @@ Unicorn.lockdown options:
           log files.
 :pledge :: (optional) a pledge string to limit the allowed system calls
            after privileges have been dropped
+:unveil :: (optional) a hash of paths to limit file system access, passed
+           to +Pledge.unveil+.  Forces use of unveil instead of chroot.
+:dev_unveil :: (optional, requires :unveil option) a hash of paths to
+               limit file system, merged into the :unveil option paths
+               if in the development environment.  Useful if you are
+               allowing more access in development, such as access needed
+               for file reloading.
 :email :: (optional) an email address to use for notifications when the
           worker process crashes or an unhandled exception is raised by
           the application or middleware.
@@ -202,6 +215,22 @@ the current directory after loading the specs, then drop
 privileges to the user given (and optionally pledging using the given
 pledge string), then run the specs.
 
+If you want to use unveil instead of chroot, you can use
++Chrooter.unveil+:
+
+  require 'minitest/autorun'
+  require 'chrooter'
+  at_exit do
+    Chrooter.unveil('user_name', 'rpath prot_exec inet unix',
+      'views' => 'r',
+      'rack' => :gem,
+      'mail' => :gem,
+    )
+  end
+
+One advantage of using unveil instead of chroot is that the unveils
+will take effect even when not starting the tests as root.
+
 == autoload
 
 As you'll find out if you try to run your applications with chroot,
@@ -210,6 +239,21 @@ for handling common autoloaded constants in the rack and mail gems.
 If you use other gems that use autoload, you'll have to add code that
 references the autoloaded constants after the application is loaded but
 before chrooting.
+
+If you have to use libraries that use autoload, it is recommended that
+you use the support for unveil instead of using chroot, and allow
+access to the given gems:
+
+  Unicorn.lockdown(self,
+    :app=>"app_name",
+    :user=>"user_name", # Set application user here
+    :pledge=>'rpath prot_exec inet unix', # More may be needed
+    :unveil=>{
+      'views' => 'r',
+      'rack' => :gem,
+      'mail' => :gem,
+    }
+  )
 
 == Author
 

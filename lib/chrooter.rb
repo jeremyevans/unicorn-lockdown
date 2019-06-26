@@ -20,9 +20,36 @@ if defined?(SimpleCov) && Process.euid == 0
   raise "cannot run coverage testing in chroot mode"
 end
 
-# Chrooter allows for testing programs in both chroot and non
+# Chrooter allows for testing programs in both chroot/unveil and non
 # chroot modes.
 module Chrooter
+  # If the current user is the super user, drop privileges to
+  # the given +user+ first.
+  #
+  # Use Pledge.unveil to limit access to the file system based on the
+  # +unveil+ option.  Then pledge the process with the given +pledge+
+  # permissions (if given).
+  def self.unveil(user, pledge=nil, unveil={}, group=user)
+    require 'unveil'
+
+    unveil = Hash[unveil]
+    if defined?(Rack)
+      unveil['rack'] = :gem
+    end
+    if defined?(Mail)
+      unveil['mail'] = :gem
+    end
+
+    if Process.euid == 0
+      _drop_privs(user, group)
+      puts "Unveiled, running as user #{user}"
+    end
+
+    Pledge.unveil(unveil)
+
+    _pledge(pledge)
+  end
+
   # If the current user is the super user, change to the given
   # user/group, chroot to the given directory, and pledge
   # the process with the given permissions (if given).
@@ -75,15 +102,10 @@ module Chrooter
     end
 
     if Process.euid == 0
-      uid = Etc.getpwnam(user).uid
-      gid = Etc.getgrnam(group).gid
-      if Process.egid != gid
-        Process.initgroups(user, gid)
-        Process::GID.change_privilege(gid)
+      _drop_privs(user, group) do
+        Dir.chroot(dir)
+        Dir.chdir('/')
       end
-      Dir.chroot(dir)
-      Dir.chdir('/')
-      Process.euid != uid and Process::UID.change_privilege(uid)
       puts "Chrooted to #{dir}, running as user #{user}"
     else
       # Load minitest plugins before freezing loaded features,
@@ -97,6 +119,26 @@ module Chrooter
       $LOADED_FEATURES.freeze
     end
 
+    _pledge(pledge)
+  end
+
+  def self._drop_privs(user, group)
+    uid = Etc.getpwnam(user).uid
+    gid = Etc.getgrnam(group).gid
+    if Process.egid != gid
+      Process.initgroups(user, gid)
+      Process::GID.change_privilege(gid)
+    end
+
+    yield if block_given?
+
+    Process.euid != uid and Process::UID.change_privilege(uid)
+
+    nil
+  end
+  private_class_method :_drop_privs
+
+  def self._pledge(pledge)
     unless defined?(SimpleCov)
       if pledge
         # If running coverage tests, don't run pledged as coverage
@@ -107,4 +149,5 @@ module Chrooter
 
     nil
   end
+  private_class_method :_pledge
 end

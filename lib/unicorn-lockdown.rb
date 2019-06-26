@@ -59,6 +59,12 @@ class << Unicorn
   # The pledge string to use.
   attr_accessor :pledge
 
+  # The hash of unveil paths to use.
+  attr_accessor :unveil
+
+  # The hash of additional unveil paths to use if in the development environment.
+  attr_accessor :dev_unveil
+
   # The address to email for crash and unhandled exception notifications
   attr_accessor :email
 
@@ -86,12 +92,16 @@ class << Unicorn
   #           Can be an array of two strings, where the first string is the primary
   #           group, and the second string is the group used for the log files.
   # :pledge :: The string to use when pledging
+  # :unveil :: A hash of unveil paths
+  # :dev_unveil :: A hash of unveil paths to use in development
   def lockdown(configurator, opts)
     Unicorn.app_name = opts.fetch(:app)
     Unicorn.user_name = opts.fetch(:user)
     Unicorn.group_name = opts[:group] || opts[:user]
     Unicorn.email = opts[:email]
     Unicorn.pledge = opts[:pledge]
+    Unicorn.unveil = opts[:unveil]
+    Unicorn.dev_unveil = opts[:dev_unveil]
 
     configurator.instance_exec do
       listen "/var/www/sockets/#{Unicorn.app_name}.sock"
@@ -137,49 +147,74 @@ class << Unicorn
           end
         end
 
-        # Before chrooting, reference all constants that use autoload
-        # that are probably needed at runtime.  This must be done
-        # before chrooting as attempting to load the constants after
-        # chrooting will break things.
-        
-        # Start with rack, which uses autoload for all constants.
-        # Most of rack's constants are not used at runtime, this
-        # lists the ones most commonly needed.
-        Rack::Multipart
-        Rack::Multipart::Parser
-        Rack::Multipart::Generator
-        Rack::Multipart::UploadedFile
-        Rack::Mime
-        Rack::Auth::Digest::Params
+        if unveil = Unicorn.unveil
+          require 'unveil'
 
-        # In the development environment, reference all middleware
-        # the unicorn will load by default, unless unicorn is
-        # set to not load middleware by default.
-        if ENV['RACK_ENV'] == 'development' && (!respond_to?(:set) || set[:default_middleware] != false)
-          Rack::ContentLength
-          Rack::CommonLogger
-          Rack::Chunked
-          Rack::Lint
-          Rack::ShowExceptions
-          Rack::TempfileReaper
+          unveil = if Unicorn.dev_unveil && ENV['RACK_ENV'] == 'development'
+            unveil.merge(Unicorn.dev_unveil)
+          else
+            Hash[unveil]
+          end
+
+          # Allow read access to the rack gem directory, as rack autoloads constants.
+          unveil['rack'] = :gem
+
+          if defined?(Mail)
+            # If using the mail library, allow read access to the mail gem directory,
+            # as mail autoloads constants.
+            unveil['mail'] = :gem
+          end
+
+          # Drop privileges
+          worker.user(Unicorn.user_name, Unicorn.group_name)
+
+          # Restrict access to the file system based on the specified unveil.
+          Pledge.unveil(unveil)
+        else
+          # Before chrooting, reference all constants that use autoload
+          # that are probably needed at runtime.  This must be done
+          # before chrooting as attempting to load the constants after
+          # chrooting will break things.
+          
+          # Start with rack, which uses autoload for all constants.
+          # Most of rack's constants are not used at runtime, this
+          # lists the ones most commonly needed.
+          Rack::Multipart
+          Rack::Multipart::Parser
+          Rack::Multipart::Generator
+          Rack::Multipart::UploadedFile
+          Rack::Mime
+          Rack::Auth::Digest::Params
+
+          # In the development environment, reference all middleware
+          # the unicorn will load by default, unless unicorn is
+          # set to not load middleware by default.
+          if ENV['RACK_ENV'] == 'development' && (!respond_to?(:set) || set[:default_middleware] != false)
+            Rack::ContentLength
+            Rack::CommonLogger
+            Rack::Chunked
+            Rack::Lint
+            Rack::ShowExceptions
+            Rack::TempfileReaper
+          end
+
+          # If using the mail library, eagerly autoload all constants.
+          # This costs about 9MB of memory, but the mail gem changes
+          # their autoloaded constants on a regular basis, so it's
+          # better to be safe than sorry.
+          if defined?(Mail)
+            Mail.eager_autoload!
+          end
+
+          # Strip path prefixes from the reloader.  This is only
+          # really need in development mode for code reloading to work.
+          pwd = Dir.pwd
+          Unreloader.strip_path_prefix(pwd) if defined?(Unreloader)
+
+          # Drop privileges.  This must be done after chrooting as
+          # chrooting requires root privileges.
+          worker.user(Unicorn.user_name, Unicorn.group_name, pwd)
         end
-
-        # If using the mail library, eagerly autoload all constants.
-        # This costs about 9MB of memory, but the mail gem changes
-        # their autoloaded constants on a regular basis, so it's
-        # better to be safe than sorry.
-        if defined?(Mail)
-          Mail.eager_autoload!
-        end
-
-        # Strip path prefixes from the reloader.  This is only
-        # really need in development mode for code reloading to work.
-        pwd = Dir.pwd
-        Unreloader.strip_path_prefix(pwd) if defined?(Unreloader)
-
-        # Drop privileges.  This must be done after chrooting as
-        # chrooting requires root privileges.
-        worker.user(Unicorn.user_name, Unicorn.group_name, pwd)
 
         if Unicorn.pledge
           # Pledge after dropping privileges, because dropping
