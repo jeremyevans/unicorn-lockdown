@@ -68,6 +68,7 @@ Here's an excerpt of the usage:
       -o     owner         operating system application owner
       -u     user          operating system user to run application
       -N                   do not start the application as root
+      -U                   setup for unveil instead of chroot
       --uid  uid           user id to use if creating the user when -U is specified
 
 It is a very good idea to specify -o and -u, the other options can be ignored
@@ -285,6 +286,17 @@ user instead of root:
 
   vi /etc/rc.d/unicorn_$app_name
   # add daemon_user=$app_user
+
+After you have tested things work correctly in unveil mode, you can
+then remove the following directories and files that were only needed
+in chroot mode:
+
+  /var/www/$app_name/var
+  /var/www/$app_name/var/www
+  /var/www/$app_name/var/www/$app_name
+  /var/www/$app_name/etc
+  /var/www/$app_name/etc/hosts
+  /var/www/$app_name/etc/resolv.conf
 
 == Author
 
