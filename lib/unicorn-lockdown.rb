@@ -40,7 +40,7 @@ class Unicorn::HttpServer
     def spawn_missing_workers
       if (pledge = Unicorn.master_pledge)
         Unicorn.master_pledge = nil
-        Pledge.pledge(pledge)
+        Pledge.pledge(pledge, Unicorn.master_execpledge)
       end
       _original_spawn_missing_workers
     end
@@ -79,6 +79,9 @@ class << Unicorn
   # The group name to run as.  Can be an array of two strings, where the first string
   # is the primary group, and the second string is the group used for the log files.
   attr_accessor :group_name
+
+  # The pledge string to use for the master process's spawned processes by default.
+  attr_accessor :master_execpledge
 
   # The pledge string to use for the master process.
   attr_accessor :master_pledge
@@ -121,6 +124,8 @@ class << Unicorn
   # :pledge :: The string to use when pledging worker processes after loading the app
   # :master_pledge :: The string to use when pledging the master process before
   #                   spawning worker processes
+  # :master_execpledge :: The pledge string for processes spawned by the master
+  #                       process (i.e. worker processes before loading the app)
   # :unveil :: A hash of unveil paths, passed to Pledge.unveil.
   # :dev_unveil :: A hash of unveil paths to use in development, in addition
   #                to the ones in :unveil.
@@ -130,6 +135,7 @@ class << Unicorn
     Unicorn.group_name = opts[:group] || opts[:user]
     Unicorn.email = opts[:email]
     Unicorn.master_pledge = opts[:master_pledge]
+    Unicorn.master_execpledge = opts[:master_execpledge]
     Unicorn.pledge = opts[:pledge]
     Unicorn.unveil = opts[:unveil]
     Unicorn.dev_unveil = opts[:dev_unveil]
