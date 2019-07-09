@@ -32,6 +32,20 @@ class Unicorn::HttpServer
     end
   end
 
+  unless ENV['UNICORN_WORKER']
+    alias _original_spawn_missing_workers spawn_missing_workers
+
+    # This is the master process, set the master pledge before spawning
+    # workers, because spawning workers will also need to be done at runtime.
+    def spawn_missing_workers
+      if (pledge = Unicorn.master_pledge)
+        Unicorn.master_pledge = nil
+        Pledge.pledge(pledge)
+      end
+      _original_spawn_missing_workers
+    end
+  end
+
   # Override the process name for the unicorn processes, both master and
   # worker.  This gives all applications a consistent prefix, which can
   # be used to pkill processes by name instead of using pidfiles.
@@ -66,7 +80,10 @@ class << Unicorn
   # is the primary group, and the second string is the group used for the log files.
   attr_accessor :group_name
 
-  # The pledge string to use.
+  # The pledge string to use for the master process.
+  attr_accessor :master_pledge
+
+  # The pledge string to use for worker processes.
   attr_accessor :pledge
 
   # The hash of unveil paths to use, switching from chroot to unveil mode.
@@ -101,7 +118,9 @@ class << Unicorn
   # :group :: The group to run as (if not set, uses :user as the group).
   #           Can be an array of two strings, where the first string is the primary
   #           group, and the second string is the group used for the log files.
-  # :pledge :: The string to use when pledging
+  # :pledge :: The string to use when pledging worker processes after loading the app
+  # :master_pledge :: The string to use when pledging the master process before
+  #                   spawning worker processes
   # :unveil :: A hash of unveil paths, passed to Pledge.unveil.
   # :dev_unveil :: A hash of unveil paths to use in development, in addition
   #                to the ones in :unveil.
@@ -110,6 +129,7 @@ class << Unicorn
     Unicorn.user_name = opts.fetch(:user)
     Unicorn.group_name = opts[:group] || opts[:user]
     Unicorn.email = opts[:email]
+    Unicorn.master_pledge = opts[:master_pledge]
     Unicorn.pledge = opts[:pledge]
     Unicorn.unveil = opts[:unveil]
     Unicorn.dev_unveil = opts[:dev_unveil]

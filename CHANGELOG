@@ -1,5 +1,7 @@
 = master
 
+* Add :master_pledge option to Unicorn lockdown, for pledging the master process (jeremyevans)
+
 * Add unicorn-lockdown-add -U, for setting up an application designed for unveil instead of chroot (jeremyevans)
 
 * Support starting unicorn master process as non-root, usable if using unveil instead of chroot (jeremyevans)

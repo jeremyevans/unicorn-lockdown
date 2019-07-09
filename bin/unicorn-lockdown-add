@@ -175,6 +175,7 @@ Unicorn.lockdown(self,
   :app=>#{app.inspect},
   :user=>#{user.inspect},
   :pledge=>'rpath prot_exec inet unix', # More may be needed
+  :master_pledge=>'rpath cpath wpath inet proc exec', # More may be needed
   :email=>'root', # update this with correct email
   #{":unveil=>{\n    'views'=>'r'\n  },\n  :dev_unveil=>{}," if unveil}
 )
