@@ -1,3 +1,7 @@
+= master
+
+* Support starting unicorn master process as non-root, usable if using unveil instead of chroot (jeremyevans)
+
 = 0.13.0 (2019-07-09)
 
 * Add Chrooter.unveil for using unveil in tests (jeremyevans)

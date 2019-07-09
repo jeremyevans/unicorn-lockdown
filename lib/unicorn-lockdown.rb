@@ -1,9 +1,10 @@
-# unicorn-lockdown is designed to be used with Unicorn's chroot support, and
-# handles:
+# unicorn-lockdown is designed to be used with Unicorn's chroot support
+# (or using ruby-pledge's unveil support), and handles:
 # * pledging the app to restrict allowed syscalls at the appropriate point
 # * handling notifications of worker crashes
-# * forcing loading of some common autoloaded constants
-# * stripping path prefixes from the reloader in development mode
+# * forcing loading of some common autoloaded constants (in chroot mode)
+# * stripping path prefixes from the reloader in development mode (in chroot mode)
+# * restricting file system access using unveil (in unveil mode)
 
 require 'pledge'
 
@@ -15,11 +16,20 @@ require 'pledge'
 ''.force_encoding('UTF-16BE')
 
 class Unicorn::HttpServer
-  # The file name in which to store request information. The
-  # /var/www/requests folder is currently accessable only
-  # to root.
-  def request_filename(pid)
-    "/var/www/requests/#{Unicorn.app_name}.#{pid}.txt"
+  if Process.euid == 0
+    # The file name in which to store request information. The
+    # /var/www/requests folder is currently accessable only
+    # to root.
+    def request_filename(pid)
+      "/var/www/requests/#{Unicorn.app_name}.#{pid}.txt"
+    end
+  else
+    # The file name in which to store request information, when not running
+    # as root. The /var/www/request-error-data/$app_name folder is accessable
+    # only to the user of the application.
+    def request_filename(pid)
+      "/var/www/request-error-data/#{Unicorn.app_name}/#{pid}.txt"
+    end
   end
 
   # Override the process name for the unicorn processes, both master and
@@ -59,19 +69,19 @@ class << Unicorn
   # The pledge string to use.
   attr_accessor :pledge
 
-  # The hash of unveil paths to use.
+  # The hash of unveil paths to use, switching from chroot to unveil mode.
   attr_accessor :unveil
 
   # The hash of additional unveil paths to use if in the development environment.
   attr_accessor :dev_unveil
 
-  # The address to email for crash and unhandled exception notifications
+  # The address to email for crash and unhandled exception notifications.
   attr_accessor :email
 
   # Helper method to write request information to the request logger.
   # +email_message+ should be an email message including headers and body.
   # This should be called at the top of the Roda route block for the
-  # application.
+  # application (or at some early point before processing in other web frameworks).
   def write_request(email_message)
     request_logger.seek(0, IO::SEEK_SET)
     request_logger.truncate(0)
@@ -79,21 +89,22 @@ class << Unicorn
     request_logger.fsync
   end
 
-  # Helper method that sets up all necessary code for chroot/pledge support.
+  # Helper method that sets up all necessary code for (chroot|unveil)/pledge support.
   # This should be called inside the appropriate unicorn.conf file.
   # The configurator should be self in the top level scope of the
   # unicorn.conf file, and this takes options:
   #
   # Options:
-  # :app :: The name of the application (required)
+  # :app (required) :: The name of the application
+  # :user (required) :: The user to run as
   # :email : The email to notify for worker crashes
-  # :user :: The user to run as (required)
   # :group :: The group to run as (if not set, uses :user as the group).
   #           Can be an array of two strings, where the first string is the primary
   #           group, and the second string is the group used for the log files.
   # :pledge :: The string to use when pledging
-  # :unveil :: A hash of unveil paths
-  # :dev_unveil :: A hash of unveil paths to use in development
+  # :unveil :: A hash of unveil paths, passed to Pledge.unveil.
+  # :dev_unveil :: A hash of unveil paths to use in development, in addition
+  #                to the ones in :unveil.
   def lockdown(configurator, opts)
     Unicorn.app_name = opts.fetch(:app)
     Unicorn.user_name = opts.fetch(:user)
@@ -270,22 +281,25 @@ class << Unicorn
                 # from the request file.
                 body = File.read(file)
 
-                # Then get information from /etc and drop group privileges
-                uid = Etc.getpwnam(Unicorn.user_name).uid
-                group = Unicorn.group_name
-                group = group.first if group.is_a?(Array)
-                gid = Etc.getgrnam(group).gid
-                if gid && Process.egid != gid
-                  Process.initgroups(Unicorn.user_name, gid)
-                  Process::GID.change_privilege(gid)
+                # Only try to drop privileges if not running as root
+                if Process.euid == 0
+                  # Then get information from /etc and drop group privileges
+                  uid = Etc.getpwnam(Unicorn.user_name).uid
+                  group = Unicorn.group_name
+                  group = group.first if group.is_a?(Array)
+                  gid = Etc.getgrnam(group).gid
+                  if gid && Process.egid != gid
+                    Process.initgroups(Unicorn.user_name, gid)
+                    Process::GID.change_privilege(gid)
+                  end
+
+                  # Then chroot
+                  Dir.chroot(Dir.pwd)
+                  Dir.chdir('/')
+
+                  # Then drop user privileges
+                  Process.euid != uid and Process::UID.change_privilege(uid)
                 end
-
-                # Then chroot
-                Dir.chroot(Dir.pwd)
-                Dir.chdir('/')
-
-                # Then drop user privileges
-                Process.euid != uid and Process::UID.change_privilege(uid)
 
                 # Then use a restrictive pledge
                 Pledge.pledge('inet prot_exec')

@@ -17,6 +17,7 @@ new_user_uid = nil
 owner = nil
 owner_uid = nil
 owner_gid = nil
+nonroot = false
 
 options = OptionParser.new do |opts|
   opts.banner = "Usage: unicorn-lockdown-add [options] app_name"
@@ -51,6 +52,10 @@ options = OptionParser.new do |opts|
     user = v
   end
 
+  opts.on("-N", "do not start the application as root") do |v|
+    nonroot = true
+  end
+
   opts.on("--uid uid", "user id to use if creating the user when -U is specified") do |v|
     new_user_uid = Integer(v, 10)
   end
@@ -73,6 +78,7 @@ resolv_file = "#{etc_dir}/resolv.conf"
 rc_file = "/etc/rc.d/unicorn_#{app.tr('-', '_')}"
 nginx_file = "/etc/nginx/#{app}.conf"
 unicorn_conf_file = "#{dir}/#{unicorn_file}"
+nonroot_dir = "/var/www/request-error-data/#{app}"
 unicorn_log_file = "/var/log/unicorn/#{app}.log"
 nginx_access_log_file = "/var/log/nginx/#{app}.access.log"
 nginx_error_log_file = "/var/log/nginx/#{app}.error.log"
@@ -91,6 +97,14 @@ if user
     Etc.getpwnam(user)
   end
   app_uid = passwd.uid
+end
+
+# Create the subdirectory used for request error info when not running as root
+unless File.directory?(nonroot_dir)
+  puts "Creating #{nonroot_dir}"
+  Dir.mkdir(nonroot_dir)
+  File.chmod(0700, nonroot_dir)
+  File.chown(app_uid, app_uid, nonroot_dir)
 end
 
 # Create application directory and chroot directories if they doesn't exist
@@ -213,6 +227,7 @@ unless File.file?(rc_file)
   File.binwrite(rc_file, <<END)
 #!/bin/ksh
 
+#{"daemon_user=#{user}" if nonroot}
 unicorn_app=#{app}
 unicorn_dir=#{dir}
 #{unicorn}#{rackup} 

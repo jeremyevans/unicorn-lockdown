@@ -41,6 +41,8 @@ Briefly, the configuration this uses the following directories:
 /var/www/sockets :: Stores unix sockets that Unicorn listens on and Nginx uses.
 /var/www/requests :: Stores temporary files for each request with request info,
                      used for crash notifications
+/var/www/request-error-info :: Stores temporary files for each request with request info,
+                               used for crash notifications when not starting app as root
 /var/log/unicorn :: Stores unicorn log files, one per application
 /var/log/nginx :: Stores nginx log files, two per application, one for access
                   and one for errors
@@ -65,6 +67,7 @@ Here's an excerpt of the usage:
       -f     unicorn_file  unicorn configuration file relative to application directory
       -o     owner         operating system application owner
       -u     user          operating system user to run application
+      -N                   do not start the application as root
       --uid  uid           user id to use if creating the user when -U is specified
 
 It is a very good idea to specify -o and -u, the other options can be ignored
@@ -255,6 +258,33 @@ is defined.
       'gem-name' => :gem,
     }
   )
+
+== Moving from root to nonroot execution
+
+If you have an existing app that uses unicorn-lockdown and starts
+as root, and you would like it to no longer start as root, you
+need to take some steps.  You would only be able to do this if you
+have switched from using chroot to using unveil, as chroot requires
+root access.
+
+First, run unicorn lockdown setup as root to create the directory to
+store the non-root requests (if you haven't already):
+
+  unicorn-lockdown-setup
+  # creates /var/www/request-error-data
+
+Then rerun unicorn lockdown add as root with the same arguments
+you ran with it previously, to add the per-app subdirectory:
+
+  unicorn-lockdown-add -o $owner -u $app_user $app_name
+  # creates /var/www/request-error-data/$app_name
+
+Then, you need to edit the rc.d file for the application as root and
+add +daemon_user+ setting, which will make the daemon start as that
+user instead of root:
+
+  vi /etc/rc.d/unicorn_$app_name
+  # add daemon_user=$app_user
 
 == Author
 
