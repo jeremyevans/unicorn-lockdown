@@ -242,7 +242,9 @@ before chrooting.
 
 If you have to use libraries that use autoload, it is recommended that
 you use the support for unveil instead of using chroot, and allow
-access to the given gems:
+access to the given gems.  unicorn-lockdown will automatically unveil
+the +rack+ gem, and will unveil the +mail+ gem if the +Mail+ constant
+is defined.
 
   Unicorn.lockdown(self,
     :app=>"app_name",
@@ -250,8 +252,7 @@ access to the given gems:
     :pledge=>'rpath prot_exec inet unix', # More may be needed
     :unveil=>{
       'views' => 'r',
-      'rack' => :gem,
-      'mail' => :gem,
+      'gem-name' => :gem,
     }
   )
 
