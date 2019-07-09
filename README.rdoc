@@ -1,17 +1,29 @@
 = unicorn-lockdown
 
 unicorn-lockdown is a helper library for running Unicorn on OpenBSD in a way
-that supports security features such as chroot (or unveil), privdrop, fork+exec,
-and pledge.
+that supports security features such as chroot (or unveil), privdrop (if starting
+as root), fork+exec, and pledge.
 
-With the configuration unicorn-lockdown uses, the unicorn process executes as root,
-and the unicorn master process continues to run as root.  The master process
+unicorn-lockdown supports a few different ways of operating.  The original way
+of operating, which is still supported, has the unicorn process executing as
+root, and the unicorn master process continuing to run as root.  The master process
 forks worker processes, which re-exec (fork+exec) so that a new memory layout
 is used in each worker process.  The worker process then loads the application,
 after which it chroots to the application's directory (or uses unveil to limit
-file system permissions), drops root privileges and then runs as the application
+file system permissions), drops root privileges and starts runs as the application
 user (privdrop), then runs pledge to limit the allowed system calls to the minimum
 required to run the application.
+
+unicorn-lockdown now supports an alternative way of operating, where it starts
+as the application user.  The mode only support unveil, since chroot requires
+root access.  This mode still forks worker processes which re-exec (fork+exec),
+then load the application, the set unveil to restrict file system access, then
+pledge to limit the allowed system calls at runtime.
+
+In both ways of operating, you can now pledge the master process, setting
+permissions for the master process itself, as well as initial permissions
+for the worker processes (which must be a superset of the permissions the
+worker process uses).
 
 == Assumptions
 
@@ -92,6 +104,8 @@ file for the app if one does not already exist, looking similar to:
     :app=>"app_name",
     :user=>"user_name", # Set application user here
     :pledge=>'rpath prot_exec inet unix', # More may be needed
+    :master_pledge=>'rpath cpath wpath inet proc exec', # More may be needed
+    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
     :email=>'root' # update this with correct email
   )
 
@@ -106,6 +120,10 @@ Unicorn.lockdown options:
           log files.
 :pledge :: (optional) a pledge string to limit the allowed system calls
            after privileges have been dropped
+:master_pledge :: The string to use when pledging the master process before
+                  spawning worker processes
+:master_execpledge :: The pledge string for processes spawned by the master
+                      process (i.e. worker processes before loading the app)
 :unveil :: (optional) a hash of paths to limit file system access, passed
            to +Pledge.unveil+.  Forces use of unveil instead of chroot.
 :dev_unveil :: (optional, requires :unveil option) a hash of paths to
@@ -126,6 +144,22 @@ With this example pledge:
   of network access.  pf (OpenBSD's firewall) should be used to limit
   access for the application's operating system user to the minimum
   necessary access needed.
+
+With this example master pledge:
+
+* rpath is needed to read files
+* cpath and wpath are needed to unlink the request error files
+* inet is needed to send emails for worker crashes
+* proc and exec are needed to spawn worker processes
+
+With this examle master exec pledge:
+
+* rpath, prot_exec, unix, inet are needed for the worker (see above)
+* stdio must be added because ruby-pledge doesn't add it automatically
+  to execpromises, and Ruby requires it
+* cpath and wpath are needed to create the request error files
+* getpw and chown are needed to set the permissions on the log files
+* unveil is needed to restrict file system access
 
 unicorn-lockdown has specific support for allowing for emails to be sent
 for Unicorn worker crashes (e.g. pledge violations). It also has support
@@ -251,9 +285,7 @@ the +rack+ gem, and will unveil the +mail+ gem if the +Mail+ constant
 is defined.
 
   Unicorn.lockdown(self,
-    :app=>"app_name",
-    :user=>"user_name", # Set application user here
-    :pledge=>'rpath prot_exec inet unix', # More may be needed
+    # ...
     :unveil=>{
       'views' => 'r',
       'gem-name' => :gem,
