@@ -93,7 +93,7 @@ directory and can make modifications to the application.
 
 unicorn-lockdown is the library required in your unicorn configuration
 file for the application, to handle configuring unicorn to run the app
-with chroot (or unveil), privdrop, fork+exec, and pledge.
+with chroot (or unveil), privdrop (if starting as root), fork+exec, and pledge.
 
 When you run unicorn-lockdown-add, it will create the unicorn configuration
 file for the app if one does not already exist, looking similar to:
@@ -104,9 +104,13 @@ file for the app if one does not already exist, looking similar to:
     :app=>"app_name",
     :user=>"user_name", # Set application user here
     :pledge=>'rpath prot_exec inet unix', # More may be needed
-    :master_pledge=>'rpath cpath wpath inet proc exec', # More may be needed
-    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
     :email=>'root' # update this with correct email
+    :master_pledge=>'rpath prot_exec cpath wpath inet proc exec', # More may be needed
+    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
+    :unveil => {
+      'views' => 'r'
+    },
+    :dev_unveil => {}
   )
 
 Unicorn.lockdown options:
@@ -148,6 +152,7 @@ With this example pledge:
 With this example master pledge:
 
 * rpath is needed to read files
+* prot_exec is needed in most cases
 * cpath and wpath are needed to unlink the request error files
 * inet is needed to send emails for worker crashes
 * proc and exec are needed to spawn worker processes
@@ -261,8 +266,6 @@ If you want to use unveil instead of chroot, you can use
   at_exit do
     Chrooter.unveil('user_name', 'rpath prot_exec inet unix',
       'views' => 'r',
-      'rack' => :gem,
-      'mail' => :gem,
     )
   end
 
@@ -318,6 +321,12 @@ user instead of root:
 
   vi /etc/rc.d/unicorn_$app_name
   # add daemon_user=$app_user
+
+You should consider adding the :master_pledge and :master_execpledge
+options for additional security:
+
+  vi /var/www/$app_name/unicorn.conf
+  # add :master_pledge and :master_execpledge options
 
 After you have tested things work correctly in unveil mode, you can
 then remove the following directories and files that were only needed
