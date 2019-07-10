@@ -175,10 +175,15 @@ Unicorn.lockdown(self,
   :app=>#{app.inspect},
   :user=>#{user.inspect},
   :pledge=>'rpath prot_exec inet unix', # More may be needed
-  :master_pledge=>'rpath cpath wpath inet proc exec', # More may be needed
+  :email=>'root', # update this with correct email#{(<<UNVEIL) if unveil}
+
+  :master_pledge=>'rpath prot_exec cpath wpath inet proc exec', # More may be needed
   :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
-  :email=>'root', # update this with correct email
-  #{":unveil=>{\n    'views'=>'r'\n  },\n  :dev_unveil=>{}," if unveil}
+  :unveil=>{
+    'views'=>'r'
+  },
+  :dev_unveil=>{},
+UNVEIL
 )
 END
   setup_file_owner.call(unicorn_conf_file)
