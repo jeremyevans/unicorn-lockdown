@@ -33,11 +33,14 @@ module Chrooter
     require 'unveil'
 
     unveil = Hash[unveil]
-    if defined?(Rack)
-      unveil['rack'] = :gem
-    end
-    if defined?(Mail)
-      unveil['mail'] = :gem
+
+    if defined?(Gem) && Gem.respond_to?(:loaded_specs)
+      if defined?(Rack) && Gem.loaded_specs['rack']
+        unveil['rack'] = :gem
+      end
+      if defined?(Mail) && Gem.loaded_specs['mail']
+        unveil['mail'] = :gem
+      end
     end
 
     if Process.euid == 0

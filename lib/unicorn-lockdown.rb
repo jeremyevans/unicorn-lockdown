@@ -193,13 +193,18 @@ class << Unicorn
             Hash[unveil]
           end
 
-          # Allow read access to the rack gem directory, as rack autoloads constants.
-          unveil['rack'] = :gem
+          # Don't set up reloading of rack and mail gems if not using rubygems
+          if defined?(Gem) && Gem.respond_to?(:loaded_specs)
+            # Allow read access to the rack gem directory, as rack autoloads constants.
+            if defined?(Rack) && Gem.loaded_specs['rack']
+              unveil['rack'] = :gem
+            end
 
-          if defined?(Mail)
             # If using the mail library, allow read access to the mail gem directory,
             # as mail autoloads constants.
-            unveil['mail'] = :gem
+            if defined?(Mail) && Gem.loaded_specs['mail']
+              unveil['mail'] = :gem
+            end
           end
 
           # Drop privileges
