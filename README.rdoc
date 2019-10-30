@@ -315,6 +315,10 @@ you ran with it previously, to add the per-app subdirectory:
   unicorn-lockdown-add -o $owner -u $app_user $app_name
   # creates /var/www/request-error-data/$app_name
 
+Alternatively, you can create the per-app subdirectory manually:
+
+  doas install -d -g $app_user -o $app_user -m 700 /var/www/request-error-data/$app_name
+
 Then, you need to edit the rc.d file for the application as root and
 add +daemon_user+ setting, which will make the daemon start as that
 user instead of root:
