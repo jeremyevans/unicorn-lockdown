@@ -15,7 +15,7 @@ user (privdrop), then runs pledge to limit the allowed system calls to the minim
 required to run the application.
 
 unicorn-lockdown now supports an alternative way of operating, where it starts
-as the application user.  The mode only support unveil, since chroot requires
+as the application user.  The mode only supports unveil, since chroot requires
 root access.  This mode still forks worker processes which re-exec (fork+exec),
 then load the application, the set unveil to restrict file system access, then
 pledge to limit the allowed system calls at runtime.
