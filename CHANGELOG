@@ -1,5 +1,7 @@
 = master
 
+* Add unveiler library for testing pledged/unveiled applications, similar to chrooter but smaller (jeremyevans)
+
 * Add :master_execpledge option to Unicorn.lockdown, for initial pledge of worker processes (jeremyevans)
 
 * Add :master_pledge option to Unicorn.lockdown, for pledging the master process (jeremyevans)

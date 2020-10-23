@@ -236,6 +236,21 @@ It is possible to use this middleware manually:
   require 'rack/email_exceptions'
   use Rack::EmailExceptions, "app_name", 'foo@example.com'
 
+=== unveiler
+
+unveiler is a library designed to help with testing applications that
+use pledge and unveil.  If you are running your application pledged and
+unveiled, you want your tests to run pledged and unveiled to find
+problems.
+
+unveiler assumes you are using minitest for testing.  To use unveiler:
+
+  require 'minitest/autorun'
+  require 'unveiler'
+  at_exit do
+    Unveiler.pledge_and_unveil('rpath prot_exec inet unix', 'views' => 'r')
+  end
+
 === chrooter
 
 chrooter is a library designed to help with testing applications both in
