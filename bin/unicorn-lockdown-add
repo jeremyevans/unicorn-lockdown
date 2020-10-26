@@ -17,8 +17,6 @@ new_user_uid = nil
 owner = nil
 owner_uid = nil
 owner_gid = nil
-nonroot = false
-unveil = false
 
 options = OptionParser.new do |opts|
   opts.banner = "Usage: unicorn-lockdown-add [options] app_name"
@@ -51,14 +49,6 @@ options = OptionParser.new do |opts|
 
   opts.on("-u user", "operating system user to run application") do |v|
     user = v
-  end
-
-  opts.on("-N", "do not start the application as root") do |v|
-    nonroot = true
-  end
-
-  opts.on("-U", "setup for unveil instead of chroot") do |v|
-    unveil = true
   end
 
   opts.on("--uid uid", "user id to use if creating the user when -U is specified") do |v|
@@ -114,7 +104,6 @@ end
 
 # Create application directory and chroot directories if they doesn't exist
 dirs = [dir, "#{dir}/public"]
-dirs.concat(["#{dir}/var", "#{dir}/var/www", "#{dir}/etc"]) unless unveil
 dirs.each do |d|
   unless File.directory?(d)
     puts "Creating #{d}"
@@ -128,34 +117,6 @@ end
 setup_file_owner = lambda do |file|
   File.chmod(0644, file)
   File.chown(owner_uid, owner_gid, file) if owner
-end
-
-unless unveil
-  # Setup symlink to root so that the same paths work both when
-  # chrooted and when not chrooted.
-  chroot_link = "#{dir}#{dir}"
-  unless File.symlink?(chroot_link)
-    puts "Creating #{chroot_link}"
-    File.symlink('/', chroot_link)
-  end
-
-  # Add /etc/hosts files to chroot
-  unless File.file?(hosts_file)
-    puts "Creating #{hosts_file}"
-    File.binwrite(hosts_file, <<END)
-127.0.0.1 localhost
-END
-    setup_file_owner.call(hosts_file)
-  end
-
-  # Add /etc/resolv.conf files to chroot
-  unless File.file?(resolv_file)
-    puts "Creating #{resolv_file}"
-    File.binwrite(resolv_file, <<END)
-lookup file
-END
-    setup_file_owner.call(resolv_file)
-  end
 end
 
 # Setup unicorn configuration file
@@ -173,17 +134,22 @@ require 'unicorn-lockdown'
 
 Unicorn.lockdown(self,
   :app=>#{app.inspect},
-  :user=>#{user.inspect},
-  :pledge=>'rpath prot_exec inet unix', # More may be needed
-  :email=>'root', # update this with correct email#{(<<UNVEIL) if unveil}
 
-  :master_pledge=>'rpath prot_exec cpath wpath inet proc exec', # More may be needed
-  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
+  # update this with correct email
+  :email=>'root',
+
+  # More pledges may be needed depending on application
+  :pledge=>'rpath prot_exec inet unix',
+  :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
+  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil',
+
+  # More unveils may be needed depending on application
   :unveil=>{
     'views'=>'r'
   },
-  :dev_unveil=>{},
-UNVEIL
+  :dev_unveil=>{
+    'models'=>'r'
+  },
 )
 END
   setup_file_owner.call(unicorn_conf_file)
@@ -235,7 +201,7 @@ unless File.file?(unicorn_log_file)
   puts "Creating #{unicorn_log_file}"
   File.binwrite(unicorn_log_file, '')
   File.chmod(0640, unicorn_log_file)
-  File.chown(app_uid, app_uid, unicorn_log_file) if app_uid
+  File.chown(app_uid, Etc.getgrnam('_unicorn').gid, unicorn_log_file) if app_uid
 end
 
 # Setup /etc/rc.d/unicorn_* file for daemon management
@@ -244,7 +210,7 @@ unless File.file?(rc_file)
   File.binwrite(rc_file, <<END)
 #!/bin/ksh
 
-#{"daemon_user=#{user}" if nonroot}
+daemon_user=#{user}
 unicorn_app=#{app}
 unicorn_dir=#{dir}
 #{unicorn}#{rackup} 
