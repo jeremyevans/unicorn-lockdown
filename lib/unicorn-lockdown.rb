@@ -1,35 +1,24 @@
-# unicorn-lockdown is designed to be used with Unicorn's chroot support
-# (or using ruby-pledge's unveil support), and handles:
+# unicorn-lockdown is designed to handle fork+exec, unveil, and pledge support
+# when using Unicorn, including:
+# * restricting file system access using unveil
 # * pledging the app to restrict allowed syscalls at the appropriate point
-# * handling notifications of worker crashes
-# * forcing loading of some common autoloaded constants (in chroot mode)
-# * stripping path prefixes from the reloader in development mode (in chroot mode)
-# * restricting file system access using unveil (in unveil mode)
+# * handling notifications of worker crashes (which are likely due to pledge
+#   violations)
 
 require 'pledge'
+require 'unveil'
 
-# Loading single_byte encoding
+# Load common encodings
 "\255".force_encoding('ISO8859-1').encode('UTF-8')
-
-# Load encodings
 ''.force_encoding('UTF-16LE')
 ''.force_encoding('UTF-16BE')
 
 class Unicorn::HttpServer
-  if Process.euid == 0
-    # The file name in which to store request information. The
-    # /var/www/requests folder is currently accessable only
-    # to root.
-    def request_filename(pid)
-      "/var/www/requests/#{Unicorn.app_name}.#{pid}.txt"
-    end
-  else
-    # The file name in which to store request information, when not running
-    # as root. The /var/www/request-error-data/$app_name folder is accessable
-    # only to the user of the application.
-    def request_filename(pid)
-      "/var/www/request-error-data/#{Unicorn.app_name}/#{pid}.txt"
-    end
+  # The file name in which to store request information.
+  # The /var/www/request-error-data/$app_name folder is accessable
+  # only to the user of the application.
+  def request_filename(pid)
+    "/var/www/request-error-data/#{Unicorn.app_name}/#{pid}.txt"
   end
 
   unless ENV['UNICORN_WORKER']
@@ -38,7 +27,7 @@ class Unicorn::HttpServer
     # This is the master process, set the master pledge before spawning
     # workers, because spawning workers will also need to be done at runtime.
     def spawn_missing_workers
-      if (pledge = Unicorn.master_pledge)
+      if pledge = Unicorn.master_pledge
         Unicorn.master_pledge = nil
         Pledge.pledge(pledge, Unicorn.master_execpledge)
       end
@@ -73,13 +62,6 @@ class << Unicorn
   # to enable programmers to debug and fix the issue.
   attr_accessor :request_logger
 
-  # The user to run as. Also specifies the group to run as if group_name is not set.
-  attr_accessor :user_name
-
-  # The group name to run as.  Can be an array of two strings, where the first string
-  # is the primary group, and the second string is the group used for the log files.
-  attr_accessor :group_name
-
   # The pledge string to use for the master process's spawned processes by default.
   attr_accessor :master_execpledge
 
@@ -89,7 +71,7 @@ class << Unicorn
   # The pledge string to use for worker processes.
   attr_accessor :pledge
 
-  # The hash of unveil paths to use, switching from chroot to unveil mode.
+  # The hash of unveil paths to use.
   attr_accessor :unveil
 
   # The hash of additional unveil paths to use if in the development environment.
@@ -109,18 +91,14 @@ class << Unicorn
     request_logger.fsync
   end
 
-  # Helper method that sets up all necessary code for (chroot|unveil)/pledge support.
+  # Helper method that sets up all necessary code for unveil/pledge support.
   # This should be called inside the appropriate unicorn.conf file.
   # The configurator should be self in the top level scope of the
   # unicorn.conf file, and this takes options:
   #
   # Options:
   # :app (required) :: The name of the application
-  # :user (required) :: The user to run as
   # :email : The email to notify for worker crashes
-  # :group :: The group to run as (if not set, uses :user as the group).
-  #           Can be an array of two strings, where the first string is the primary
-  #           group, and the second string is the group used for the log files.
   # :pledge :: The string to use when pledging worker processes after loading the app
   # :master_pledge :: The string to use when pledging the master process before
   #                   spawning worker processes
@@ -131,8 +109,6 @@ class << Unicorn
   #                to the ones in :unveil.
   def lockdown(configurator, opts)
     Unicorn.app_name = opts.fetch(:app)
-    Unicorn.user_name = opts.fetch(:user)
-    Unicorn.group_name = opts[:group] || opts[:user]
     Unicorn.email = opts[:email]
     Unicorn.master_pledge = opts[:master_pledge]
     Unicorn.master_execpledge = opts[:master_execpledge]
@@ -162,13 +138,12 @@ class << Unicorn
       after_fork do |server, worker|
         server.logger.info("worker=#{worker.nr} spawned pid=#{$$}")
 
-        # Set the request logger for the worker process after forking. The
-        # process is still root here, so it can open the file in write mode.
+        # Set the request logger for the worker process after forking.
         Unicorn.request_logger = File.open(server.request_filename($$), "wb")
         Unicorn.request_logger.sync = true
       end
 
-      if wrap_app = Unicorn.email && ENV['RACK_ENV'] == 'production'
+      if (wrap_app = Unicorn.email) && ENV['RACK_ENV'] == 'production'
         require 'rack/email_exceptions'
       end
 
@@ -184,85 +159,31 @@ class << Unicorn
           end
         end
 
-        if unveil = Unicorn.unveil
-          require 'unveil'
-
-          unveil = if Unicorn.dev_unveil && ENV['RACK_ENV'] == 'development'
-            unveil.merge(Unicorn.dev_unveil)
-          else
-            Hash[unveil]
-          end
-
-          # Don't set up reloading of rack and mail gems if not using rubygems
-          if defined?(Gem) && Gem.respond_to?(:loaded_specs)
-            # Allow read access to the rack gem directory, as rack autoloads constants.
-            if defined?(Rack) && Gem.loaded_specs['rack']
-              unveil['rack'] = :gem
-            end
-
-            # If using the mail library, allow read access to the mail gem directory,
-            # as mail autoloads constants.
-            if defined?(Mail) && Gem.loaded_specs['mail']
-              unveil['mail'] = :gem
-            end
-          end
-
-          # Drop privileges
-          worker.user(Unicorn.user_name, Unicorn.group_name)
-
-          # Restrict access to the file system based on the specified unveil.
-          Pledge.unveil(unveil)
+        unveil = if Unicorn.dev_unveil && ENV['RACK_ENV'] == 'development'
+          Unicorn.unveil.merge(Unicorn.dev_unveil)
         else
-          # Before chrooting, reference all constants that use autoload
-          # that are probably needed at runtime.  This must be done
-          # before chrooting as attempting to load the constants after
-          # chrooting will break things.
-          
-          # Start with rack, which uses autoload for all constants.
-          # Most of rack's constants are not used at runtime, this
-          # lists the ones most commonly needed.
-          Rack::Multipart
-          Rack::Multipart::Parser
-          Rack::Multipart::Generator
-          Rack::Multipart::UploadedFile
-          Rack::Mime
-          Rack::Auth::Digest::Params
-
-          # In the development environment, reference all middleware
-          # the unicorn will load by default, unless unicorn is
-          # set to not load middleware by default.
-          if ENV['RACK_ENV'] == 'development' && (!respond_to?(:set) || set[:default_middleware] != false)
-            Rack::ContentLength
-            Rack::CommonLogger
-            Rack::Chunked
-            Rack::Lint
-            Rack::ShowExceptions
-            Rack::TempfileReaper
-          end
-
-          # If using the mail library, eagerly autoload all constants.
-          # This costs about 9MB of memory, but the mail gem changes
-          # their autoloaded constants on a regular basis, so it's
-          # better to be safe than sorry.
-          if defined?(Mail)
-            Mail.eager_autoload!
-          end
-
-          # Strip path prefixes from the reloader.  This is only
-          # really need in development mode for code reloading to work.
-          pwd = Dir.pwd
-          Unreloader.strip_path_prefix(pwd) if defined?(Unreloader)
-
-          # Drop privileges.  This must be done after chrooting as
-          # chrooting requires root privileges.
-          worker.user(Unicorn.user_name, Unicorn.group_name, pwd)
+          Hash[Unicorn.unveil]
         end
 
-        if Unicorn.pledge
-          # Pledge after dropping privileges, because dropping
-          # privileges requires a separate pledge.
-          Pledge.pledge(Unicorn.pledge)
+        # Don't allow loading files in rack and mail gems if not using rubygems
+        if defined?(Gem) && Gem.respond_to?(:loaded_specs)
+          # Allow read access to the rack gem directory, as rack autoloads constants.
+          if defined?(Rack) && Gem.loaded_specs['rack']
+            unveil['rack'] = :gem
+          end
+
+          # If using the mail library, allow read access to the mail gem directory,
+          # as mail autoloads constants.
+          if defined?(Mail) && Gem.loaded_specs['mail']
+            unveil['mail'] = :gem
+          end
         end
+
+        # Restrict access to the file system based on the specified unveil.
+        Pledge.unveil(unveil)
+
+        # Pledge after unveiling, because unveiling requires a separate pledge.
+        Pledge.pledge(Unicorn.pledge)
       end
 
       # the last time there was a worker crash and the request information
@@ -305,32 +226,12 @@ class << Unicorn
               # If the request filename exists and the worker process crashed,
               # send a notification email.
               Process.waitpid(fork do
-                # Load net/smtp early, before chrooting. 
+                # Load net/smtp early
                 require 'net/smtp'
 
                 # When setting the email, first get the contents of the email
                 # from the request file.
                 body = File.read(file)
-
-                # Only try to drop privileges if not running as root
-                if Process.euid == 0
-                  # Then get information from /etc and drop group privileges
-                  uid = Etc.getpwnam(Unicorn.user_name).uid
-                  group = Unicorn.group_name
-                  group = group.first if group.is_a?(Array)
-                  gid = Etc.getgrnam(group).gid
-                  if gid && Process.egid != gid
-                    Process.initgroups(Unicorn.user_name, gid)
-                    Process::GID.change_privilege(gid)
-                  end
-
-                  # Then chroot
-                  Dir.chroot(Dir.pwd)
-                  Dir.chdir('/')
-
-                  # Then drop user privileges
-                  Process.euid != uid and Process::UID.change_privilege(uid)
-                end
 
                 # Then use a restrictive pledge
                 Pledge.pledge('inet prot_exec')
@@ -354,4 +255,3 @@ class << Unicorn
     end
   end
 end
-
