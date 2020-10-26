@@ -1,9 +1,8 @@
 require 'pledge'
-
-# Loading single_byte encoding
-"\255".force_encoding('ISO8859-1').encode('UTF-8')
+require 'unveil'
 
 # Load encodings
+"\255".force_encoding('ISO8859-1').encode('UTF-8')
 ''.force_encoding('UTF-16LE')
 ''.force_encoding('UTF-16BE')
 
@@ -17,8 +16,6 @@ module Unveiler
   # permissions.  This will automatically unveil the rack and mail gems
   # if they are loaded.
   def self.pledge_and_unveil(pledge, unveil)
-    require 'unveil'
-
     unveil = Hash[unveil]
 
     if defined?(Gem) && Gem.respond_to?(:loaded_specs)
