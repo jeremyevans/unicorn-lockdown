@@ -135,7 +135,7 @@ require 'unicorn-lockdown'
 Unicorn.lockdown(self,
   :app=>#{app.inspect},
 
-  # update this with correct email
+  # Update this with correct email
   :email=>'root',
 
   # More pledges may be needed depending on application

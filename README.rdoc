@@ -80,7 +80,7 @@ file for the app if one does not already exist, looking similar to:
   Unicorn.lockdown(self,
     :app=>"app_name",
 
-    # update this with correct email
+    # Update this with correct email
     :email=>'root',
 
     # More pledges may be needed depending on application
@@ -209,9 +209,7 @@ In your Roda application:
 To specifically restrict access to the database socket even when access to
 /tmp is allowed, you can unveil the database socket path with no permissions:
 
-```
-'/tmp/.s.PGSQL.5432'=>''
-```
+  '/tmp/.s.PGSQL.5432'=>''
 
 Note that there are potentially other security issues with unveiling access
 to /tmp beyond granting access to the database server, so it is recommended
