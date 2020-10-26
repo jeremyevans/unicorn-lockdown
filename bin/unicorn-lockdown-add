@@ -102,7 +102,7 @@ unless File.directory?(nonroot_dir)
   File.chown(app_uid, app_uid, nonroot_dir)
 end
 
-# Create application directory and chroot directories if they doesn't exist
+# Create application public directory if it doesn't exist (needed by nginx)
 dirs = [dir, "#{dir}/public"]
 dirs.each do |d|
   unless File.directory?(d)

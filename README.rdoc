@@ -1,43 +1,23 @@
 = unicorn-lockdown
 
-unicorn-lockdown is a helper library for running Unicorn on OpenBSD in a way
-that supports security features such as chroot (or unveil), privdrop (if starting
-as root), fork+exec, and pledge.
+unicorn-lockdown is a helper library for running Unicorn on OpenBSD with pledge,
+unveil, and fork+exec for increased security.
 
-unicorn-lockdown supports a few different ways of operating.  The original way
-of operating, which is still supported, has the unicorn process executing as
-root, and the unicorn master process continuing to run as root.  The master process
-forks worker processes, which re-exec (fork+exec) so that a new memory layout
-is used in each worker process.  The worker process then loads the application,
-after which it chroots to the application's directory (or uses unveil to limit
-file system permissions), drops root privileges and starts runs as the application
-user (privdrop), then runs pledge to limit the allowed system calls to the minimum
-required to run the application.
-
-unicorn-lockdown now supports an alternative way of operating, where it starts
-as the application user.  The mode only supports unveil, since chroot requires
-root access.  This mode still forks worker processes which re-exec (fork+exec),
-then load the application, the set unveil to restrict file system access, then
-pledge to limit the allowed system calls at runtime.
-
-In both ways of operating, you can now pledge the master process, setting
-permissions for the master process itself, as well as initial permissions
-for the worker processes (which must be a superset of the permissions the
-worker process uses).
+With unicorn-lockdown, unicorn should be started as the application user, which
+should be different than the user that owns the application's files.  unicorn
+will pledge the master process (if configured), then fork worker processes.
+The worker processes will re-exec (fork+exec), then load the application, then
+set unveil to restrict file system access, then pledge to limit the allowed
+system calls at runtime.
 
 == Assumptions
 
-unicorn-lockdown assumes you are using OpenBSD 6.2+ with the nginx and
-rubyXY-unicorn packages installed, and that you have a unicorn symlink in
-the PATH to the appropriate unicornXY executable.
+unicorn-lockdown assumes you are using OpenBSD 6.6+ with the nginx and
+<tt>rubyXY-unicorn</tt> and <tt>rubyXY-pledge</tt> packages installed, and that
+you have a +unicorn+ symlink in the PATH to the appropriate +unicornXY+ executable.
 
 It also assumes you have a SMTP server listening on localhost port 25 to
 receive notification emails of worker crashes, if you are notifying for those.
-
-If using unveil instead of chroot to limit file system access, you must be
-using OpenBSD 6.6+ (or 6.5-current after July 2019), one of the OpenBSD Ruby
-ports with backported support for unveil to work correctly with +File.realpath+,
-and version 1.2.0+ of the pledge gem.
 
 == Usage
 
@@ -51,16 +31,14 @@ the following as root after reading the file and understanding what it does.
 Briefly, the configuration this uses the following directories:
 
 /var/www/sockets :: Stores unix sockets that Unicorn listens on and Nginx uses.
-/var/www/requests :: Stores temporary files for each request with request info,
-                     used for crash notifications
 /var/www/request-error-info :: Stores temporary files for each request with request info,
-                               used for crash notifications when not starting app as root
+                               used for crash notifications
 /var/log/unicorn :: Stores unicorn log files, one per application
 /var/log/nginx :: Stores nginx log files, two per application, one for access
                   and one for errors
 
-This adds a _unicorn group that all per-application users will use as their
-group, as well as a /etc/rc.d/rc.unicorn file that the per application
+This adds a _unicorn group that all application users will use as one of their
+groups, as well as a /etc/rc.d/rc.unicorn file that the application
 /etc/rc.d/unicorn_* files will use.
 
 === unicorn-lockdown-add
@@ -79,21 +57,20 @@ Here's an excerpt of the usage:
       -f     unicorn_file  unicorn configuration file relative to application directory
       -o     owner         operating system application owner
       -u     user          operating system user to run application
-      -N                   do not start the application as root
-      -U                   setup for unveil instead of chroot
       --uid  uid           user id to use if creating the user when -U is specified
 
 It is a very good idea to specify -o and -u, the other options can be ignored
 if you are OK with the default values.  The owner (-o) and the user (-u) should be
-different.  The user is the user the application runs as, and should have very limited
-access to the application directory.  The owner is the user that owns the application
-directory and can make modifications to the application.
+different.  The user is the user the application runs as, and should have read-only
+access to the application directory, other than locations where you want the
+application user to be able to modify files at runtime.  The owner is the user that
+owns the application directory and can make modifications to the application.
 
 === unicorn-lockdown
 
 unicorn-lockdown is the library required in your unicorn configuration
 file for the application, to handle configuring unicorn to run the app
-with chroot (or unveil), privdrop (if starting as root), fork+exec, and pledge.
+with fork+exec, unveil, and pledge.
 
 When you run unicorn-lockdown-add, it will create the unicorn configuration
 file for the app if one does not already exist, looking similar to:
@@ -102,46 +79,47 @@ file for the app if one does not already exist, looking similar to:
 
   Unicorn.lockdown(self,
     :app=>"app_name",
-    :user=>"user_name", # Set application user here
-    :pledge=>'rpath prot_exec inet unix', # More may be needed
-    :email=>'root' # update this with correct email
-    :master_pledge=>'rpath prot_exec cpath wpath inet proc exec', # More may be needed
-    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath getpw chown unveil', # More may be needed
-    :unveil => {
-      'views' => 'r'
+
+    # update this with correct email
+    :email=>'root',
+
+    # More pledges may be needed depending on application
+    :pledge=>'rpath prot_exec inet unix',
+    :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
+    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil',
+
+    # More unveils may be needed depending on application
+    :unveil=>{
+      'views'=>'r'
     },
-    :dev_unveil => {}
+    :dev_unveil=>{
+      'models'=>'r'
+    },
   )
 
 Unicorn.lockdown options:
 
 :app :: (required) a short string for the name of the application, used
         for socket/log file names and in notifications
-:user :: (required) the user to drop privileges to
-:group :: (optional) the group to use to run the application.  On Unicorn
-          5.5.0+, can be an array with two entries, the first used as the
-          process primary group, the second as the owner of the unicorn
-          log files.
-:pledge :: (optional) a pledge string to limit the allowed system calls
-           after privileges have been dropped
-:master_pledge :: The string to use when pledging the master process before
-                  spawning worker processes
-:master_execpledge :: The pledge string for processes spawned by the master
-                      process (i.e. worker processes before loading the app)
-:unveil :: (optional) a hash of paths to limit file system access, passed
-           to +Pledge.unveil+.  Forces use of unveil instead of chroot.
-:dev_unveil :: (optional, requires :unveil option) a hash of paths to
-               limit file system, merged into the :unveil option paths
-               if in the development environment.  Useful if you are
-               allowing more access in development, such as access needed
-               for file reloading.
 :email :: (optional) an email address to use for notifications when the
           worker process crashes or an unhandled exception is raised by
           the application or middleware.
+:pledge :: (optional) a pledge string to limit the allowed system calls
+           after privileges have been dropped
+:master_pledge :: (optional) The string to use when pledging the master process before
+                  spawning worker processes
+:master_execpledge :: (optional) The pledge string for processes spawned by the master
+                      process (i.e. worker processes before loading the app)
+:unveil :: (required) a hash of paths to limit file system access, passed
+           to +Pledge.unveil+.
+:dev_unveil :: (optional) a hash of paths to limit file system, merged into the :unveil
+               option paths if in the development environment.  Useful if you are
+               allowing more access in development, such as access needed
+               for file reloading.
 
 With this example pledge:
 
-* rpath is needed to read files in the chrooted file system
+* rpath is needed to read files
 * prot_exec is needed in most cases
 * unix is needed for the unix socket to nginx
 * inet is not needed in all cases, but in most applications need some form
@@ -163,13 +141,10 @@ With this examle master exec pledge:
 * stdio must be added because ruby-pledge doesn't add it automatically
   to execpromises, and Ruby requires it
 * cpath and wpath are needed to create the request error files
-* getpw and chown are needed to set the permissions on the log files
 * unveil is needed to restrict file system access
 
 unicorn-lockdown has specific support for allowing for emails to be sent
-for Unicorn worker crashes (e.g. pledge violations). It also has support
-for using rack-unreloader to run your application in development mode
-under the chroot while allowing for reloading files if they are modified.
+for Unicorn worker crashes (e.g. pledge violations).
 Additionally, unicorn-lockdown modifies unicorn's process status line in a
 way that allows it to be controllable via OpenBSD's rcctl program for
 stopping/starting/reloading/restarting daemons.
@@ -209,10 +184,20 @@ underlying problem.
 
 If you are using PostgreSQL as the database for the application, and using
 unix sockets to connect the application to the database, if the database
-is restarted, the application will no longer be able to connect to it.  The
-only way to fix this is to kill the worker process and have the master
-process spawn a new worker.  The roda-pg_disconnect plugin is a plugin
-for the roda web toolkit to kill the worker if it detects the database
+is restarted, the application will no longer be able to connect to it unless
+you unveil the path the database socket (stored in /tmp by default).  It can
+be a better approach security wise not to allow this, to prevent the
+application from being able to establish new database connections with
+potentially different credentials, as a mitigation in case the server is
+compromised.
+
+To allow the application to handle cases where the database is disconnected,
+such as due to a restart of PostgreSQL, you can kill the worker process if
+a disconnect error is detected, and have the master process then spawn a new
+worker.
+
+The roda-pg_disconnect plugin is a plugin for the roda web toolkit to kill the
+worker process after handling the connection if it detects the database
 connection has been lost.  This plugin assumes the use of the Sequel database
 library and postgres adapter with the pg driver.
 
@@ -220,6 +205,21 @@ In your Roda application:
 
   # Sometime before loading the error_handler plugin
   plugin :pg_disconnect
+
+To specifically restrict access to the database socket even when access to
+/tmp is allowed, you can unveil the database socket path with no permissions:
+
+```
+'/tmp/.s.PGSQL.5432'=>''
+```
+
+Note that there are potentially other security issues with unveiling access
+to /tmp beyond granting access to the database server, so it is recommended
+you do not unveil it.  If the application needs a directory for temporary
+files (e.g. for handling uploaded files with rack), you can set the +TMPDIR+
+environment variable to an appropriate directory that is writable by the
+application user and not other users, and most web applications will respect
+that (assuming they use the tmpfile/tmpdir libraries in the standard library).
 
 === rack-email_exceptions
 
@@ -251,56 +251,14 @@ unveiler assumes you are using minitest for testing.  To use unveiler:
     Unveiler.pledge_and_unveil('rpath prot_exec inet unix', 'views' => 'r')
   end
 
-=== chrooter
-
-chrooter is a library designed to help with testing applications both in
-chroot mode and non-chroot mode.  If you are running your application
-chrooted, you must support testing while chrooted otherwise it is very
-difficult to find problems that only occur when chrooted before putting
-the application into production, such as a file being read from outside
-the chroot.
-
-chrooter assumes you are using minitest for testing.  To use chrooter:
-
-  require 'minitest/autorun'
-  require 'chrooter'
-  at_exit{Chrooter.chroot('user_name', 'rpath prot_exec inet unix')}
-
-If you run your specs as a regular user, it will execute them without
-chrooting, but in a way that can still catch some problems that occur
-when chrooted.  If you run your specs as root, it will chroot to
-the current directory after loading the specs, then drop
-privileges to the user given (and optionally pledging using the given
-pledge string), then run the specs.
-
-If you want to use unveil instead of chroot, you can use
-+Chrooter.unveil+:
-
-  require 'minitest/autorun'
-  require 'chrooter'
-  at_exit do
-    Chrooter.unveil('user_name', 'rpath prot_exec inet unix',
-      'views' => 'r',
-    )
-  end
-
-One advantage of using unveil instead of chroot is that the unveils
-will take effect even when not starting the tests as root.
-
 == autoload
 
-As you'll find out if you try to run your applications with chroot,
-autoload is the enemy.  Both unicorn-lockdown and chrooter have support
-for handling common autoloaded constants in the rack and mail gems.
-If you use other gems that use autoload, you'll have to add code that
-references the autoloaded constants after the application is loaded but
-before chrooting.
-
-If you have to use libraries that use autoload, it is recommended that
-you use the support for unveil instead of using chroot, and allow
-access to the given gems.  unicorn-lockdown will automatically unveil
-the +rack+ gem, and will unveil the +mail+ gem if the +Mail+ constant
-is defined.
+As you'll find out if you try to run your applications with unveil,
+autoload and other forms of runtime requires are the enemy.  Both
+unicorn-lockdown and unveiler have support for handling common autoloaded
+constants in the rack and mail gems.  If you use other gems that use
+autoload or runtime requires, you'll have to add unveils for the appropriate
+gems:
 
   Unicorn.lockdown(self,
     # ...
@@ -309,54 +267,6 @@ is defined.
       'gem-name' => :gem,
     }
   )
-
-== Moving from root to nonroot execution
-
-If you have an existing app that uses unicorn-lockdown and starts
-as root, and you would like it to no longer start as root, you
-need to take some steps.  You would only be able to do this if you
-have switched from using chroot to using unveil, as chroot requires
-root access.
-
-First, run unicorn lockdown setup as root to create the directory to
-store the non-root requests (if you haven't already):
-
-  unicorn-lockdown-setup
-  # creates /var/www/request-error-data
-
-Then rerun unicorn lockdown add as root with the same arguments
-you ran with it previously, to add the per-app subdirectory:
-
-  unicorn-lockdown-add -o $owner -u $app_user $app_name
-  # creates /var/www/request-error-data/$app_name
-
-Alternatively, you can create the per-app subdirectory manually:
-
-  doas install -d -g $app_user -o $app_user -m 700 /var/www/request-error-data/$app_name
-
-Then, you need to edit the rc.d file for the application as root and
-add +daemon_user+ setting, which will make the daemon start as that
-user instead of root:
-
-  vi /etc/rc.d/unicorn_$app_name
-  # add daemon_user=$app_user
-
-You should consider adding the :master_pledge and :master_execpledge
-options for additional security:
-
-  vi /var/www/$app_name/unicorn.conf
-  # add :master_pledge and :master_execpledge options
-
-After you have tested things work correctly in unveil mode, you can
-then remove the following directories and files that were only needed
-in chroot mode:
-
-  /var/www/$app_name/var
-  /var/www/$app_name/var/www
-  /var/www/$app_name/var/www/$app_name
-  /var/www/$app_name/etc
-  /var/www/$app_name/etc/hosts
-  /var/www/$app_name/etc/resolv.conf
 
 == Author
 
