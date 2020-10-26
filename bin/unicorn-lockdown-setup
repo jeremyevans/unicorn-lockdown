@@ -7,9 +7,8 @@ def sh(*args)
   system(*args) || raise("Error while running: #{args.join(' ')}")
 end
 
-request_dir = '/var/www/requests'
+request_dir = '/var/www/request-error-data'
 socket_dir = '/var/www/sockets'
-nonroot_dir = '/var/www/request-error-data'
 unicorn_log_dir = '/var/log/unicorn'
 nginx_log_dir = "/var/log/nginx"
 rc_unicorn_file = '/etc/rc.d/rc.unicorn'
@@ -32,16 +31,8 @@ unicorn_group_id = group.gid
 unless File.directory?(request_dir)
   puts "Creating #{request_dir}"
   Dir.mkdir(request_dir)
-  File.chmod(0700, request_dir)
-  File.chown(root_id, daemon_id, request_dir)
-end
-
-# Setup requests directory to hold per-request information for crash notifications
-unless File.directory?(nonroot_dir)
-  puts "Creating #{nonroot_dir}"
-  Dir.mkdir(nonroot_dir)
-  File.chmod(0710, nonroot_dir)
-  File.chown(root_id, unicorn_group_id, nonroot_dir)
+  File.chmod(0710, request_dir)
+  File.chown(root_id, unicorn_group_id, request_dir)
 end
 
 # Setup sockets directory to hold nginx connection sockets
