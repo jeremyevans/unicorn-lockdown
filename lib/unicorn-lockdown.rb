@@ -143,7 +143,7 @@ class << Unicorn
         Unicorn.request_logger.sync = true
       end
 
-      if (wrap_app = Unicorn.email) && ENV['RACK_ENV'] == 'production'
+      if wrap_app = Unicorn.email
         require 'rack/email_exceptions'
       end
 
