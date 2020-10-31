@@ -1,6 +1,6 @@
 = master
 
-* Remove support for chroot and starting applications as root (jeremyevans)
+* Switch to starting unicorn master process as application user, drop chroot support, require unveil (jeremyevans)
 
 * Remove chrooter library (jeremyevans)
 
@@ -9,10 +9,6 @@
 * Add :master_execpledge option to Unicorn.lockdown, for initial pledge of worker processes (jeremyevans)
 
 * Add :master_pledge option to Unicorn.lockdown, for pledging the master process (jeremyevans)
-
-* Add unicorn-lockdown-add -U, for setting up an application designed for unveil instead of chroot (jeremyevans)
-
-* Support starting unicorn master process as non-root, usable if using unveil instead of chroot (jeremyevans)
 
 = 0.13.0 (2019-07-09)
 
