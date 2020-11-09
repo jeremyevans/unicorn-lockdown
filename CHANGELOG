@@ -1,5 +1,7 @@
 = master
 
+* Require unicorn-lockdown-add -o and -u options, and require options have arguments (jeremyevans)
+
 * Switch to starting unicorn master process as application user, drop chroot support, require unveil (jeremyevans)
 
 * Remove chrooter library (jeremyevans)

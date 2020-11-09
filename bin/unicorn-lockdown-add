@@ -19,7 +19,7 @@ owner_uid = nil
 owner_gid = nil
 
 options = OptionParser.new do |opts|
-  opts.banner = "Usage: unicorn-lockdown-add [options] app_name"
+  opts.banner = "Usage: unicorn-lockdown-add -o owner -u user [options] app_name"
   opts.separator "Options:"
 
   opts.on_tail("-h", "-?", "--help", "Show this message") do
@@ -27,39 +27,44 @@ options = OptionParser.new do |opts|
     exit
   end
 
-  opts.on("-c rackup_file", "rackup configuration file") do |v|
+  opts.on("-c RACKUP_FILE", "rackup configuration file") do |v|
     rackup = "rackup_file=#{v}\n"
   end
 
-  opts.on("-d dir", "application directory name") do |v|
+  opts.on("-d DIR", "application directory name") do |v|
     dir = v
   end
 
-  opts.on("-f unicorn_file", "unicorn configuration file relative to application directory") do |v|
+  opts.on("-f UNICORN_FILE", "unicorn configuration file relative to application directory") do |v|
     unicorn_file = v
     unicorn = "unicorn_conf=#{v}\n"
   end
 
-  opts.on("-o owner", "operating system application owner") do |v|
+  opts.on("-o OWNER", "operating system application owner") do |v|
     owner = v
     ent = Etc.getpwnam(v)
     owner_uid = ent.uid
     owner_gid = ent.gid
   end
 
-  opts.on("-u user", "operating system user to run application") do |v|
+  opts.on("-u USER", "operating system user to run application") do |v|
     user = v
   end
 
-  opts.on("--uid uid", "user id to use if creating the user when -U is specified") do |v|
+  opts.on("--uid UID", "user id to use if creating the user when -U is specified") do |v|
     new_user_uid = Integer(v, 10)
   end
 end
 options.parse!
 
+unless user && owner
+  $stderr.puts "Must pass -o and -u options when calling unicorn_lockdown_add"
+  puts options
+  exit(1)
+end
+
 app = ARGV.shift
 dir ||= app
-base_dir = dir
 
 root_id = 0
 bin_id = 7
@@ -67,9 +72,6 @@ www_id = 67
 
 www_root = '/var/www'
 dir = "#{www_root}/#{dir}"
-etc_dir = "#{dir}/etc"
-hosts_file = "#{etc_dir}/hosts"
-resolv_file = "#{etc_dir}/resolv.conf"
 rc_file = "/etc/rc.d/unicorn_#{app.tr('-', '_')}"
 nginx_file = "/etc/nginx/#{app}.conf"
 unicorn_conf_file = "#{dir}/#{unicorn_file}"
@@ -79,20 +81,18 @@ nginx_access_log_file = "/var/log/nginx/#{app}.access.log"
 nginx_error_log_file = "/var/log/nginx/#{app}.error.log"
 
 # Add application user if it doesn't exist
-if user
-  passwd = begin
-    Etc.getpwnam(user)
-  rescue ArgumentError
-    args = ['/usr/sbin/useradd', '-d', '/var/empty', '-g', '=uid', '-G', '_unicorn', '-L', 'daemon', '-s', '/sbin/nologin']
-    if new_user_uid
-      args << '-u' << new_user_uid.to_s
-    end
-    args << user
-    sh(*args)
-    Etc.getpwnam(user)
+passwd = begin
+  Etc.getpwnam(user)
+rescue ArgumentError
+  args = ['/usr/sbin/useradd', '-d', '/var/empty', '-g', '=uid', '-G', '_unicorn', '-L', 'daemon', '-s', '/sbin/nologin']
+  if new_user_uid
+    args << '-u' << new_user_uid.to_s
   end
-  app_uid = passwd.uid
+  args << user
+  sh(*args)
+  Etc.getpwnam(user)
 end
+app_uid = passwd.uid
 
 # Create the subdirectory used for request error info when not running as root
 unless File.directory?(nonroot_dir)
@@ -109,14 +109,14 @@ dirs.each do |d|
     puts "Creating #{d}"
     Dir.mkdir(d)
     File.chmod(0755, d)
-    File.chown(owner_uid, owner_gid, d) if owner
+    File.chown(owner_uid, owner_gid, d)
   end
 end
 
 # DRY up file ownership code
 setup_file_owner = lambda do |file|
   File.chmod(0644, file)
-  File.chown(owner_uid, owner_gid, file) if owner
+  File.chown(owner_uid, owner_gid, file)
 end
 
 # Setup unicorn configuration file
@@ -126,7 +126,7 @@ unless File.file?(unicorn_conf_file)
     puts "Creating #{unicorn_conf_dir}"
     Dir.mkdir(unicorn_conf_dir)
     File.chmod(0755, unicorn_conf_dir)
-    File.chown(owner_uid, owner_gid, unicorn_conf_dir) if owner
+    File.chown(owner_uid, owner_gid, unicorn_conf_dir)
   end
   puts "Creating #{unicorn_conf_file}"
   File.binwrite(unicorn_conf_file, <<END)
