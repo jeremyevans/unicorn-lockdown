@@ -242,8 +242,11 @@ class << Unicorn
                   body = "Subject: [#{Unicorn.app_name}] Unicorn Worker Process Crash\r\n\r\nNo email content provided for app: #{Unicorn.app_name}"
                 end
 
+                # Don't verify localhost hostname, to avoid SSL errors raised in newer versions of net/smtp
+                smtp_params = Net::SMTP.method(:start).parameters.include?([:key, :tls_verify]) ? {tls_verify: false, tls_hostname: 'localhost'} : {}
+
                 # Finally send an email to localhost via SMTP.
-                Net::SMTP.start('127.0.0.1'){|s| s.send_message(body, Unicorn.email, Unicorn.email)}
+                Net::SMTP.start('127.0.0.1', **smtp_params){|s| s.send_message(body, Unicorn.email, Unicorn.email)}
               end)
             end
           end
