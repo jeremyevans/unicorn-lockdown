@@ -91,9 +91,9 @@ file for the app if one does not already exist, looking similar to:
     :email=>'root',
 
     # More pledges may be needed depending on application
-    :pledge=>'rpath prot_exec inet unix',
+    :pledge=>'rpath prot_exec inet unix flock',
     :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
-    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil',
+    :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock',
 
     # More unveils may be needed depending on application
     :unveil=>{
@@ -134,6 +134,7 @@ With this example pledge:
   exceptions that occur without process crashes.  pf (OpenBSD's firewall)
   should be used to limit access for the application's operating system
   user to the minimum necessary access needed.
+* flock is needed in Ruby 3.1+ (not necessarily required in older Ruby versions).
 
 With this example master pledge:
 

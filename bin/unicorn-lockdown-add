@@ -139,9 +139,9 @@ Unicorn.lockdown(self,
   :email=>'root',
 
   # More pledges may be needed depending on application
-  :pledge=>'rpath prot_exec inet unix',
+  :pledge=>'rpath prot_exec inet unix flock',
   :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
-  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil',
+  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock',
 
   # More unveils may be needed depending on application
   :unveil=>{
