@@ -29,10 +29,12 @@ module Unveiler
 
     Pledge.unveil(unveil)
 
-    unless defined?(SimpleCov)
-      # If running coverage tests, don't run pledged as coverage
-      # testing can require many additional permissions.
-      Pledge.pledge(pledge)
+    if defined?(SimpleCov)
+      # If running coverage tests, add necessary pledges for
+      # coverage testing to work.
+      pledge = (pledge.split + %w'rpath wpath cpath flock').uniq.join(' ')
     end
+
+    Pledge.pledge(pledge)
   end
 end
