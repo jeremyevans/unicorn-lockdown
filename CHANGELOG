@@ -1,3 +1,7 @@
+= master
+
+* Fix roda pg_disconnect plugin to correctly error if error_handler is already loaded (jeremyevans)
+
 = 1.0.0 (2020-11-09)
 
 * Require unicorn-lockdown-add -o and -u options, and require options have arguments (jeremyevans)

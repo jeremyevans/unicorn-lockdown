@@ -16,7 +16,7 @@ class Roda
     # Sequel database library with the postgres adapter and pg driver.
     module PgDisconnect
       def self.load_dependencies(app)
-        raise RodaError, "error_handler plugin already loaded" if app.method_defined?(:handle_error)
+        raise RodaError, "error_handler plugin already loaded" if app.method_defined?(:handle_error) || app.private_method_defined?(:handle_error)
       end
 
       module InstanceMethods
