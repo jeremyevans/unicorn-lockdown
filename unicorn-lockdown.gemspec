@@ -11,6 +11,7 @@ spec = Gem::Specification.new do |s|
   s.bindir = 'bin'
   s.executables << 'unicorn-lockdown-add' << 'unicorn-lockdown-setup'
 
+  s.required_ruby_version = ">= 2.0.0"
   s.add_dependency("pledge")
   s.add_dependency("unicorn")
 end
