@@ -14,4 +14,9 @@ spec = Gem::Specification.new do |s|
   s.required_ruby_version = ">= 2.0.0"
   s.add_dependency("pledge")
   s.add_dependency("unicorn")
+
+  s.add_development_dependency("rack")
+  s.add_development_dependency("mail")
+  s.add_development_dependency("roda")
+  s.add_development_dependency("minitest-global_expectations")
 end

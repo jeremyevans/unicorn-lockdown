@@ -1,1 +1,6 @@
 /unicorn-lockdown-*.gem
+/rdoc
+/coverage
+/*.core
+/test/etc
+/test/var

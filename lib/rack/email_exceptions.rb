@@ -36,8 +36,10 @@ ENV:
 #{env.map{|k, v| "#{k.inspect} => #{v.inspect}"}.sort.join("\n")}
 END
 
+      # :nocov:
       # Don't verify localhost hostname, to avoid SSL errors raised in newer versions of net/smtp
       smtp_params = Net::SMTP.method(:start).parameters.include?([:key, :tls_verify]) ? {tls_verify: false, tls_hostname: 'localhost'} : {}
+      # :nocov:
 
       Net::SMTP.start('127.0.0.1', **smtp_params){|s| s.send_message(body, @email, @email)}
 

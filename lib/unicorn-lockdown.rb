@@ -18,7 +18,7 @@ class Unicorn::HttpServer
   # The /var/www/request-error-data/$app_name folder is accessable
   # only to the user of the application.
   def request_filename(pid)
-    "/var/www/request-error-data/#{Unicorn.app_name}/#{pid}.txt"
+    "#{Unicorn.unicorn_lockdown_prefix}/www/request-error-data/#{Unicorn.app_name}/#{pid}.txt"
   end
 
   unless ENV['UNICORN_WORKER']
@@ -80,6 +80,10 @@ class << Unicorn
   # The address to email for crash and unhandled exception notifications.
   attr_accessor :email
 
+  # The prefix for unicorn lockdown files
+  attr_reader :unicorn_lockdown_prefix
+  Unicorn.instance_variable_set(:@unicorn_lockdown_prefix, ENV['UNICORN_LOCKDOWN_PREFIX'] || '/var')
+
   # Helper method to write request information to the request logger.
   # +email_message+ should be an email message including headers and body.
   # This should be called at the top of the Roda route block for the
@@ -117,7 +121,7 @@ class << Unicorn
     Unicorn.dev_unveil = opts[:dev_unveil]
 
     configurator.instance_exec do
-      listen "/var/www/sockets/#{Unicorn.app_name}.sock"
+      listen "#{Unicorn.unicorn_lockdown_prefix}/www/sockets/#{Unicorn.app_name}.sock"
 
       # Buffer all client bodies in memory.  This assumes an Nginx limit of 10MB,
       # by using 11MB this ensures that client bodies are always buffered in
@@ -128,12 +132,15 @@ class << Unicorn
       # Run all worker processes with unique memory layouts
       worker_exec true
 
+      # :nocov:
       # Only change the log path if daemonizing.
       # Otherwise, continue to log to stdout/stderr.
       if Unicorn::Configurator::RACKUP[:daemonize]
-        stdout_path "/var/log/unicorn/#{Unicorn.app_name}.log"
-        stderr_path "/var/log/unicorn/#{Unicorn.app_name}.log"
+        log_path = "#{Unicorn.unicorn_lockdown_prefix}/log/unicorn/#{Unicorn.app_name}.log"
+        stdout_path log_path
+        stderr_path log_path
       end
+      # :nocov:
 
       after_fork do |server, worker|
         server.logger.info("worker=#{worker.nr} spawned pid=#{$$}")
@@ -225,7 +232,7 @@ class << Unicorn
             unless skip_email
               # If the request filename exists and the worker process crashed,
               # send a notification email.
-              Process.waitpid(fork do
+              Process.waitpid(Process.fork do
                 # Load net/smtp early
                 require 'net/smtp'
 
@@ -234,7 +241,7 @@ class << Unicorn
                 body = File.read(file)
 
                 # Then use a restrictive pledge
-                Pledge.pledge('inet prot_exec')
+                Pledge.pledge(ENV['UNICORN_LOCKDOWN_WORKER_CRASH_PLEDGE'] || 'inet prot_exec')
 
                 # If body empty, crash happened before a request was received,
                 # try to at least provide the application name in this case.
@@ -242,8 +249,10 @@ class << Unicorn
                   body = "Subject: [#{Unicorn.app_name}] Unicorn Worker Process Crash\r\n\r\nNo email content provided for app: #{Unicorn.app_name}"
                 end
 
+                # :nocov:
                 # Don't verify localhost hostname, to avoid SSL errors raised in newer versions of net/smtp
                 smtp_params = Net::SMTP.method(:start).parameters.include?([:key, :tls_verify]) ? {tls_verify: false, tls_hostname: 'localhost'} : {}
+                # :nocov:
 
                 # Finally send an email to localhost via SMTP.
                 Net::SMTP.start('127.0.0.1', **smtp_params){|s| s.send_message(body, Unicorn.email, Unicorn.email)}

@@ -29,7 +29,9 @@ module Unveiler
 
     Pledge.unveil(unveil)
 
+    # :nocov:
     if defined?(SimpleCov)
+    # :nocov:
       # If running coverage tests, add necessary pledges for
       # coverage testing to work.
       pledge = (pledge.split + %w'rpath wpath cpath flock').uniq.join(' ')

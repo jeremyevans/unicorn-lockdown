@@ -20,15 +20,15 @@ class Roda
       end
 
       module InstanceMethods
-        # When database connection is lost, kill the worker process, so a new one will be generated.
-        # This is necessary because the unix socket used by the database connection is no longer available
-        # once the application is unveiled or pledged.
+        # :nocov:
+        # Handle old Roda dispatch API
         def call
           super
         rescue Sequel::DatabaseDisconnectError, Sequel::DatabaseConnectionError, PG::ConnectionBad
           Process.kill(:QUIT, $$)
           raise
         end
+        # :nocov:
 
         # When database connection is lost, kill the worker process, so a new one will be generated.
         # This is necessary because the unix socket used by the database connection is no longer available
