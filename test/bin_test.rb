@@ -62,9 +62,9 @@ describe 'unicorn_lockdown bin' do
       File.binread("#{prefix}/etc/rc.d/unicorn_test_app").must_equal(<<END)
 #!/bin/ksh
 
-daemon_user=billg
+daemon_user=#{user}
 unicorn_app=test-app
-unicorn_dir=/home/billg/unicorn-lockdown/test/var/www/test-app
+unicorn_dir=#{prefix}/var/www/test-app
 
 . /etc/rc.d/rc.unicorn
 END
@@ -101,9 +101,9 @@ upstream test-app_unicorn {
 }
 server {
     server_name test-app;
-    access_log /home/billg/unicorn-lockdown/test/var/log/nginx/test-app.access.log main;
-    error_log /home/billg/unicorn-lockdown/test/var/log/nginx/test-app.error.log warn;
-    root /home/billg/unicorn-lockdown/test/var/www/test-app/public;
+    access_log #{prefix}/var/log/nginx/test-app.access.log main;
+    error_log #{prefix}/var/log/nginx/test-app.error.log warn;
+    root #{prefix}/var/www/test-app/public;
     error_page   500 503 /500.html;
     error_page   502 504 /502.html;
     proxy_set_header  X-Real-IP  $remote_addr;
@@ -138,9 +138,9 @@ END
     File.binread("#{prefix}/etc/rc.d/unicorn_test_app2").must_equal(<<END)
 #!/bin/ksh
 
-daemon_user=billg
+daemon_user=#{user}
 unicorn_app=test-app2
-unicorn_dir=/home/billg/unicorn-lockdown/test/var/www/ta
+unicorn_dir=#{prefix}/var/www/ta
 unicorn_conf=u/u.conf
 rackup_file=c.ru
 
@@ -179,9 +179,9 @@ upstream test-app2_unicorn {
 }
 server {
     server_name test-app2;
-    access_log /home/billg/unicorn-lockdown/test/var/log/nginx/test-app2.access.log main;
-    error_log /home/billg/unicorn-lockdown/test/var/log/nginx/test-app2.error.log warn;
-    root /home/billg/unicorn-lockdown/test/var/www/ta/public;
+    access_log #{prefix}/var/log/nginx/test-app2.access.log main;
+    error_log #{prefix}/var/log/nginx/test-app2.error.log warn;
+    root #{prefix}/var/www/ta/public;
     error_page   500 503 /500.html;
     error_page   502 504 /502.html;
     proxy_set_header  X-Real-IP  $remote_addr;
