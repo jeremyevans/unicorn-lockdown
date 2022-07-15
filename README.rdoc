@@ -111,7 +111,7 @@ Unicorn.lockdown options:
 :email :: (optional) an email address to use for notifications when the
           worker process crashes or an unhandled exception is raised by
           the application or middleware.
-:pledge :: (optional) a pledge string to limit the allowed system calls
+:pledge :: (required) a pledge string to limit the allowed system calls
            after privileges have been dropped
 :master_pledge :: (optional) The string to use when pledging the master process before
                   spawning worker processes
