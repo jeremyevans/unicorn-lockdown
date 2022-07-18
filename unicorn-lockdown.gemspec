@@ -1,4 +1,4 @@
-spec = Gem::Specification.new do |s|
+Gem::Specification.new do |s|
   s.name = 'unicorn-lockdown'
   s.version = '1.0.0'
   s.platform = Gem::Platform::RUBY
@@ -10,6 +10,13 @@ spec = Gem::Specification.new do |s|
   s.files = ['README.rdoc', 'MIT-LICENSE', 'CHANGELOG'] + Dir['bin/*'] + Dir['files/*'] + Dir['lib/**/*.rb']
   s.bindir = 'bin'
   s.executables << 'unicorn-lockdown-add' << 'unicorn-lockdown-setup'
+
+  s.metadata          = { 
+    'bug_tracker_uri'   => 'https://github.com/jeremyevans/unicorn-lockdown/issues',
+    'changelog_uri'     => 'https://github.com/jeremyevans/unicorn-lockdown/blob/master/CHANGELOG',
+    'mailing_list_uri'  => 'https://github.com/jeremyevans/unicorn-lockdown/discussions',
+    "source_code_uri"   => 'https://github.com/jeremyevans/unicorn-lockdown'
+  }
 
   s.required_ruby_version = ">= 2.0.0"
   s.add_dependency("pledge")
