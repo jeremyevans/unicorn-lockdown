@@ -1,4 +1,4 @@
-= master
+= 1.1.0 (2022-07-18)
 
 * Make unveiler still pledge if SimpleCov is loaded, but update pledge promises (jeremyevans)
 
