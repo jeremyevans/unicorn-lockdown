@@ -4,7 +4,7 @@ CLEAN.include ["*.gem", "rdoc", "coverage"]
 
 desc "Build unicorn-lockdown gem"
 task :package=>[:clean] do |p|
-  sh %{#{FileUtils::RUBY} -S gem build visibility_checker.gemspec}
+  sh %{#{FileUtils::RUBY} -S gem build unicorn-lockdown.gemspec}
 end
 
 ### Specs
