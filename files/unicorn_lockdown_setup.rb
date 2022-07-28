@@ -68,7 +68,11 @@ end
 # Setup rc.unicorn file
 unless File.file?(rc_unicorn_file)
   puts "Creating #{rc_unicorn_file}"
-  File.binwrite(rc_unicorn_file, File.binread(File.join(File.dirname(__dir__), 'files', 'rc.unicorn')))
+  filename = File.join(File.dirname(__dir__), 'files', 'rc.unicorn')
+  # :nocov:
+  filename << ".71" if `/usr/bin/uname -r` < '7.2'
+  # :nocov:
+  File.binwrite(rc_unicorn_file, File.binread(filename))
   File.chmod(0644, rc_unicorn_file)
   chown.(root_id, root_id, rc_unicorn_file)
 end

@@ -146,7 +146,7 @@ Unicorn.lockdown(self,
   # More pledges may be needed depending on application
   :pledge=>'rpath prot_exec inet unix flock',
   :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
-  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock',
+  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock getpw',
 
   # More unveils may be needed depending on application
   :unveil=>{
@@ -212,12 +212,17 @@ end
 # Setup /etc/rc.d/unicorn_* file for daemon management
 unless File.file?(rc_file)
   puts "Creating #{rc_file}"
+
+  # :nocov:
+  dir_var = `/usr/bin/uname -r` < '7.2' ? 'unicorn_dir' : 'daemon_execdir'
+  # :nocov:
+
   File.binwrite(rc_file, <<END)
 #!/bin/ksh
 
 daemon_user=#{user}
+#{dir_var}=#{dir}
 unicorn_app=#{app}
-unicorn_dir=#{dir}
 #{unicorn}#{rackup}
 . /etc/rc.d/rc.unicorn
 END

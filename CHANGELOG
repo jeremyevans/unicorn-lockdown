@@ -1,3 +1,9 @@
+= master
+
+* Add getpw to default master_execpledge, will be necessary on OpenBSD 7.2 (jeremyevans)
+
+* Support OpenBSD 7.2 daemon_execdir for setting directory (jeremyevans)
+
 = 1.1.0 (2022-07-18)
 
 * Make unveiler still pledge if SimpleCov is loaded, but update pledge promises (jeremyevans)

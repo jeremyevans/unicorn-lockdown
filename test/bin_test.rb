@@ -10,6 +10,15 @@ rescue ArgumentError
 else
 require 'etc'
 user = Etc.getpwuid.name
+
+if `/usr/bin/uname -r` < '7.2'
+  dir_var = 'unicorn_dir'
+  rc_unicorn = "files/rc.unicorn.71"
+else
+  dir_var = 'daemon_execdir'
+  rc_unicorn = "files/rc.unicorn"
+end
+
 describe 'unicorn_lockdown bin' do
   before do
     [ "#{prefix}/var/www", "#{prefix}/var/log", "#{prefix}/etc/rc.d", "#{prefix}/etc/nginx" ].each do |dir|
@@ -30,7 +39,7 @@ describe 'unicorn_lockdown bin' do
       File.directory?("#{prefix}/var/log/unicorn").must_equal true
       File.directory?("#{prefix}/var/log/nginx").must_equal true
       File.file?("#{prefix}/etc/rc.d/rc.unicorn").must_equal true
-      File.binread("#{prefix}/etc/rc.d/rc.unicorn").must_equal(File.binread("files/rc.unicorn"))
+      File.binread("#{prefix}/etc/rc.d/rc.unicorn").must_equal(File.binread(rc_unicorn))
     end
 
     r, w = IO.pipe
@@ -63,8 +72,8 @@ describe 'unicorn_lockdown bin' do
 #!/bin/ksh
 
 daemon_user=#{user}
+#{dir_var}=#{prefix}/var/www/test-app
 unicorn_app=test-app
-unicorn_dir=#{prefix}/var/www/test-app
 
 . /etc/rc.d/rc.unicorn
 END
@@ -82,7 +91,7 @@ Unicorn.lockdown(self,
   # More pledges may be needed depending on application
   :pledge=>'rpath prot_exec inet unix flock',
   :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
-  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock',
+  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock getpw',
 
   # More unveils may be needed depending on application
   :unveil=>{
@@ -139,8 +148,8 @@ END
 #!/bin/ksh
 
 daemon_user=#{user}
+#{dir_var}=#{prefix}/var/www/ta
 unicorn_app=test-app2
-unicorn_dir=#{prefix}/var/www/ta
 unicorn_conf=u/u.conf
 rackup_file=c.ru
 
@@ -160,7 +169,7 @@ Unicorn.lockdown(self,
   # More pledges may be needed depending on application
   :pledge=>'rpath prot_exec inet unix flock',
   :master_pledge=>'rpath prot_exec cpath wpath inet proc exec',
-  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock',
+  :master_execpledge=>'stdio rpath prot_exec inet unix cpath wpath unveil flock getpw',
 
   # More unveils may be needed depending on application
   :unveil=>{
