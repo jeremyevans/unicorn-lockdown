@@ -27,16 +27,24 @@ module Unveiler
       end
     end
 
-    Pledge.unveil(unveil)
-
     # :nocov:
     if defined?(SimpleCov)
     # :nocov:
-      # If running coverage tests, add necessary pledges for
+      # If running coverage tests, add necessary pledges and unveils for
       # coverage testing to work.
+      dir = SimpleCov.coverage_dir
+      unveil[dir] = 'rwc'
+
+      # :nocov:
+      # Must create directory before attempting to unveil it.
+      # When running unveiler tests, the coverage directory is already created.
+      Dir.mkdir(dir) unless File.directory?(dir)
+      # :nocov:
+
       pledge = (pledge.split + %w'rpath wpath cpath flock').uniq.join(' ')
     end
 
+    Pledge.unveil(unveil)
     Pledge.pledge(pledge)
   end
 end

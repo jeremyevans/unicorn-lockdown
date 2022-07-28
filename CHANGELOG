@@ -1,5 +1,7 @@
 = master
 
+* Create and unveil the coverage directory when using SimpleCov with Unveiler (jeremyevans)
+
 * Add getpw to default master_execpledge, will be necessary on OpenBSD 7.2 (jeremyevans)
 
 * Support OpenBSD 7.2 daemon_execdir for setting directory (jeremyevans)
