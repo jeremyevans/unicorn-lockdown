@@ -2,11 +2,11 @@
 
 daemon="/usr/local/bin/unicorn"
 daemon_flags="-c ${unicorn_conf} -D ${rackup_file}"
-pexp="ruby[0-9][0-9]: unicorn-$unicorn_app-master .*"
 rc_stop_signal=QUIT
 
 . /etc/rc.d/rc.subr
 
+pexp="ruby[0-9][0-9]: unicorn-$unicorn_app-master .*"
 [ -n "${daemon_execdir}" ] || _rc_err "$0: daemon_execdir is not set"
 [ -n "${unicorn_app}" ] || _rc_err "$0: unicorn_app is not set"
 
