@@ -26,6 +26,14 @@ task :test_cov=>:clean do
   sh "#{ruby} test/all.rb"
 end
 
+desc "Run CI test"
+task :test_ci do
+  ruby = ENV['RUBY'] ||= FileUtils::RUBY 
+  ENV['UNICORN'] ||= ruby.sub('ruby', 'unicorn')
+  ENV['UNICORN_LOCKDOWN_CI_TEST'] = '1'
+  sh "#{ruby} test/all.rb"
+end
+
 ### RDoc
 
 require "rdoc/task"

@@ -1,8 +1,6 @@
 require_relative 'test_helper'
 require 'fileutils'
 
-prefix = ENV['UNICORN_LOCKDOWN_BIN_PREFIX'] ||= File.join(Dir.pwd, 'test')
-
 begin
   Etc.getgrnam('_unicorn')
 rescue ArgumentError
@@ -20,7 +18,10 @@ else
 end
 
 describe 'unicorn_lockdown bin' do
+  attr_reader :prefix
+
   before do
+    @prefix = ENV['UNICORN_LOCKDOWN_BIN_PREFIX'] ||= File.join(Dir.pwd, 'test')
     [ "#{prefix}/var/www", "#{prefix}/var/log", "#{prefix}/etc/rc.d", "#{prefix}/etc/nginx" ].each do |dir|
       FileUtils.mkdir_p(dir)
     end
@@ -29,6 +30,7 @@ describe 'unicorn_lockdown bin' do
     ["#{prefix}/var", "#{prefix}/etc"].each do |dir|
       FileUtils.rm_r(dir)
     end
+    ENV.delete('UNICORN_LOCKDOWN_BIN_PREFIX')
   end
 
   it  "unicorn-lockdown-setup and unicorn-lockdown-add create appropriate files and directories" do
@@ -206,6 +208,80 @@ server {
     }
 }
 END
+  end
+end
+
+if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
+  require 'net/http'
+
+  describe 'running applications with unicorn-lockdown' do
+    system(RUBY, 'bin/unicorn-lockdown-setup', :out=>'/dev/null').must_equal true
+    File.directory?("/var/www/request-error-data").must_equal true
+    File.directory?("/var/www/sockets").must_equal true
+    File.directory?("/var/log/unicorn").must_equal true
+    File.directory?("/var/log/nginx").must_equal true
+    File.file?("/etc/rc.d/rc.unicorn").must_equal true
+    File.binread("/etc/rc.d/rc.unicorn").must_equal(File.binread(rc_unicorn))
+
+    system(RUBY, 'bin/unicorn-lockdown-add', '-o', 'root', '-u', '_unicornlockdowntest', 'unicorn-lockdown-test', :out=>'/dev/null').must_equal true
+    File.directory?("/var/www/request-error-data/unicorn-lockdown-test").must_equal true
+    File.directory?("/var/www/unicorn-lockdown-test").must_equal true
+    File.directory?("/var/www/unicorn-lockdown-test/public").must_equal true
+    File.file?("/var/log/nginx/unicorn-lockdown-test.access.log").must_equal true
+    File.file?("/var/log/nginx/unicorn-lockdown-test.error.log").must_equal true
+    File.file?("/var/log/unicorn/unicorn-lockdown-test.log").must_equal true
+    File.file?("/etc/rc.d/unicorn_unicorn_lockdown_test").must_equal true
+    File.file?("/var/www/unicorn-lockdown-test/unicorn.conf").must_equal true
+    File.file?("/etc/nginx/unicorn-lockdown-test.conf").must_equal true
+
+    Dir.mkdir("/var/www/unicorn-lockdown-test/views")
+    File.write("/var/www/unicorn-lockdown-test/views/a", 'a')
+    File.write("/var/www/unicorn-lockdown-test/public/a", 'a')
+    config.ru = "/var/www/unicorn-lockdown-test/config.ru"
+    File.write(config_ru, <<-RUBY)
+      run(proc do |env|
+        [200, {'content-length'=>'2'}, ['OK']]
+      end)
+    RUBY
+
+    nginx_conf = '/etc/nginx/nginx.conf'
+    File.write(nginx_conf, File.read(nginx_conf).sub("http {", "http {\ninclude unicorn-lockdown-test.conf;"))
+
+    system('/usr/sbin/rcctl', 'start', 'nginx', :out=>'/dev/null').must_equal true
+
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal false
+
+    system('/usr/sbin/rcctl', 'start', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    sleep 1
+
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+
+    http = Net::HTTP.new('unicorn-lockdown-test')
+    http.ipaddr = '127.0.0.1'
+    http.get('/').body.must_equal 'OK'
+
+    File.write(config_ru, <<-RUBY)
+      run(proc do |env|
+        [200, {}, Dir["{views,public}/*"]] # only views unveiled
+      end)
+    RUBY
+    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    sleep 1
+    http.get('/').body.must_equal 'views/a'
+
+    File.write(config_ru, <<-RUBY)
+      run(proc do |env|
+        File.mkfifo('fifo') # pledge violation
+      end)
+    RUBY
+    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    sleep 1
+    http.get('/').code.must_equal '502'
+
+    system('/usr/sbin/rcctl', 'stop', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    sleep 1
+
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal false
   end
 end
 end
