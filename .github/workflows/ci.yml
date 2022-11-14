@@ -22,5 +22,6 @@ jobs:
         prepare: |
           pkg_add ruby31-pledge ruby31-unicorn nginx
           gem31 install -N mail roda minitest-global_expectations
+          groupadd _unicorn
         run: |
           rake31 test_ci
