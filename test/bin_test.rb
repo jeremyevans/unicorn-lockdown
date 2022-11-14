@@ -213,7 +213,7 @@ END
 if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST']
   require 'net/http'
 
-  output_opts = ENV['UNICORN_LOCKDOWN_CI_TEST'] == 'verbose' ? {:out=>'/dev/null'} : {}
+  output_opts = ENV['UNICORN_LOCKDOWN_CI_TEST'] == 'verbose' ? {} : {:out=>'/dev/null'}
 
   it 'running applications with unicorn-lockdown' do
     system(RUBY, 'bin/unicorn-lockdown-setup', **output_opts).must_equal true
