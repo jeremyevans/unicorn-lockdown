@@ -40,9 +40,11 @@ module Unveiler
       # information.
       unveil['.'] = 'r'
 
-      # Unveil access to the simplecov-html gem, since that is used by default
-      # to build the coverage pages.
-      unveil['simplecov-html'] = :gem
+      if defined?(Gem)
+        # Unveil access to the simplecov-html gem, since that is used by default
+        # to build the coverage pages.
+        unveil['simplecov-html'] = :gem
+      end
 
       # :nocov:
       # Must create directory before attempting to unveil it.
