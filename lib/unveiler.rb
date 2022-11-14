@@ -38,11 +38,11 @@ module Unveiler
       # Unveil read access to the entire current directory, since any part
       # that has covered code needs to be read to generate the coverage
       # information.
-      unveils['.'] = 'r'
+      unveil['.'] = 'r'
 
       # Unveil access to the simplecov-html gem, since that is used by default
       # to build the coverage pages.
-      unveils['simplecov-html'] = :gem
+      unveil['simplecov-html'] = :gem
 
       # :nocov:
       # Must create directory before attempting to unveil it.
