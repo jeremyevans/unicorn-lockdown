@@ -209,12 +209,11 @@ server {
 }
 END
   end
-end
 
 if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
   require 'net/http'
 
-  describe 'running applications with unicorn-lockdown' do
+  it 'running applications with unicorn-lockdown' do
     system(RUBY, 'bin/unicorn-lockdown-setup', :out=>'/dev/null').must_equal true
     File.directory?("/var/www/request-error-data").must_equal true
     File.directory?("/var/www/sockets").must_equal true
@@ -283,5 +282,6 @@ if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
 
     system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal false
   end
+end
 end
 end
