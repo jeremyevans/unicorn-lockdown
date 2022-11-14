@@ -210,11 +210,13 @@ server {
 END
   end
 
-if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
+if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST']
   require 'net/http'
 
+  output_opts = ENV['UNICORN_LOCKDOWN_CI_TEST'] == 'verbose' ? {:out=>'/dev/null'} : {}
+
   it 'running applications with unicorn-lockdown' do
-    system(RUBY, 'bin/unicorn-lockdown-setup', :out=>'/dev/null').must_equal true
+    system(RUBY, 'bin/unicorn-lockdown-setup', **output_opts).must_equal true
     File.directory?("/var/www/request-error-data").must_equal true
     File.directory?("/var/www/sockets").must_equal true
     File.directory?("/var/log/unicorn").must_equal true
@@ -222,7 +224,7 @@ if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
     File.file?("/etc/rc.d/rc.unicorn").must_equal true
     File.binread("/etc/rc.d/rc.unicorn").must_equal(File.binread(rc_unicorn))
 
-    system(RUBY, 'bin/unicorn-lockdown-add', '-o', 'root', '-u', '_unicornlockdowntest', 'unicorn-lockdown-test', :out=>'/dev/null').must_equal true
+    system(RUBY, 'bin/unicorn-lockdown-add', '-o', 'root', '-u', '_unicornlockdowntest', 'unicorn-lockdown-test', **output_opts).must_equal true
     File.directory?("/var/www/request-error-data/unicorn-lockdown-test").must_equal true
     File.directory?("/var/www/unicorn-lockdown-test").must_equal true
     File.directory?("/var/www/unicorn-lockdown-test/public").must_equal true
@@ -246,14 +248,14 @@ if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
     nginx_conf = '/etc/nginx/nginx.conf'
     File.write(nginx_conf, File.read(nginx_conf).sub("http {", "http {\ninclude unicorn-lockdown-test.conf;"))
 
-    system('/usr/sbin/rcctl', 'start', 'nginx', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'start', 'nginx', **output_opts).must_equal true
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal false
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
 
-    system('/usr/sbin/rcctl', 'start', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'start', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
 
     http = Net::HTTP.new('unicorn-lockdown-test')
     http.ipaddr = '127.0.0.1'
@@ -264,7 +266,7 @@ if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
         [200, {}, Dir["{views,public}/*"]] # only views unveiled
       end)
     RUBY
-    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
     http.get('/').body.must_equal 'views/a'
 
@@ -273,14 +275,14 @@ if Process.uid == 0 && ENV['UNICORN_LOCKDOWN_CI_TEST'] == '1'
         File.mkfifo('fifo') # pledge violation
       end)
     RUBY
-    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
     http.get('/').code.must_equal '502'
 
-    system('/usr/sbin/rcctl', 'stop', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal true
+    system('/usr/sbin/rcctl', 'stop', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', :out=>'/dev/null').must_equal false
+    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
   end
 end
 end

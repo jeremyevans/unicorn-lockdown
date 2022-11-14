@@ -30,7 +30,7 @@ desc "Run CI test"
 task :test_ci do
   ruby = ENV['RUBY'] ||= FileUtils::RUBY 
   ENV['UNICORN'] ||= ruby.sub('ruby', 'unicorn')
-  ENV['UNICORN_LOCKDOWN_CI_TEST'] = '1'
+  ENV['UNICORN_LOCKDOWN_CI_TEST'] = 'verbose'
   sh "#{ruby} test/all.rb"
 end
 
