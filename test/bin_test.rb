@@ -249,17 +249,16 @@ describe 'running applications with unicorn-lockdown' do
 
     nginx_conf = '/etc/nginx/nginx.conf'
     File.write(nginx_conf, File.read(nginx_conf).sub("http {", "http {\ninclude unicorn-lockdown-test.conf;"))
+    FileUtils.ln_s(ENV['UNICORN'], '/usr/local/bin/unicorn')
 
-puts File.read(nginx_conf)
-puts File.read("/etc/nginx/unicorn-lockdown-test.conf")
     system('/usr/sbin/rcctl', '-d', 'start', 'nginx', **output_opts).must_equal true
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
+    system('/usr/sbin/rcctl', '-d', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
 
-    system('/usr/sbin/rcctl', 'start', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
+    system('/usr/sbin/rcctl', '-d', 'start', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
+    system('/usr/sbin/rcctl', '-d', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
 
     http = Net::HTTP.new('unicorn-lockdown-test')
     http.ipaddr = '127.0.0.1'
@@ -270,7 +269,7 @@ puts File.read("/etc/nginx/unicorn-lockdown-test.conf")
         [200, {}, Dir["{views,public}/*"]] # only views unveiled
       end)
     RUBY
-    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
+    system('/usr/sbin/rcctl', '-d', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
     http.get('/').body.must_equal 'views/a'
 
@@ -279,14 +278,14 @@ puts File.read("/etc/nginx/unicorn-lockdown-test.conf")
         File.mkfifo('fifo') # pledge violation
       end)
     RUBY
-    system('/usr/sbin/rcctl', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
+    system('/usr/sbin/rcctl', '-d', 'reload', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
     http.get('/').code.must_equal '502'
 
-    system('/usr/sbin/rcctl', 'stop', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
+    system('/usr/sbin/rcctl', '-d', 'stop', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal true
     sleep 1
 
-    system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
+    system('/usr/sbin/rcctl', '-d', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
   end
 end
 end
