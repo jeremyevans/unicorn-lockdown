@@ -250,7 +250,9 @@ describe 'running applications with unicorn-lockdown' do
     nginx_conf = '/etc/nginx/nginx.conf'
     File.write(nginx_conf, File.read(nginx_conf).sub("http {", "http {\ninclude unicorn-lockdown-test.conf;"))
 
-    system('/usr/sbin/rcctl', 'start', 'nginx', **output_opts).must_equal true
+puts File.read(nginx_conf)
+puts File.read("/etc/nginx/unicorn-lockdown-test.conf")
+    system('/usr/sbin/rcctl', '-d', 'start', 'nginx', **output_opts).must_equal true
 
     system('/usr/sbin/rcctl', 'check', 'unicorn_unicorn_lockdown_test', **output_opts).must_equal false
 
