@@ -31,6 +31,7 @@ task :test_ci do
   ruby = ENV['RUBY'] ||= FileUtils::RUBY 
   ENV['UNICORN'] ||= ruby.sub('ruby', 'unicorn')
   ENV['UNICORN_LOCKDOWN_CI_TEST'] = 'verbose'
+  ENV['GEM'] ||= ruby.sub('ruby', 'gem')
   sh "#{ruby} test/all.rb"
 end
 

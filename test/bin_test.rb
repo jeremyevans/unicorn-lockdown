@@ -250,6 +250,8 @@ describe 'running applications with unicorn-lockdown' do
     nginx_conf = '/etc/nginx/nginx.conf'
     File.write(nginx_conf, File.read(nginx_conf).sub("http {", "http {\ninclude unicorn-lockdown-test.conf;"))
     FileUtils.ln_s(ENV['UNICORN'], '/usr/local/bin/unicorn')
+    system(ENV['GEM'], 'build', 'unicorn-lockdown.gemspec')
+    system(ENV['GEM'], 'install', '-N', '--local', Dir['*.gem'].first)
 
     system('/usr/sbin/rcctl', '-d', 'start', 'nginx', **output_opts).must_equal true
 
