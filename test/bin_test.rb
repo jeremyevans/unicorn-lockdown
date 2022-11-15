@@ -240,7 +240,7 @@ describe 'running applications with unicorn-lockdown' do
     Dir.mkdir("/var/www/unicorn-lockdown-test/views")
     File.write("/var/www/unicorn-lockdown-test/views/a", 'a')
     File.write("/var/www/unicorn-lockdown-test/public/a", 'a')
-    config.ru = "/var/www/unicorn-lockdown-test/config.ru"
+    config_ru = "/var/www/unicorn-lockdown-test/config.ru"
     File.write(config_ru, <<-RUBY)
       run(proc do |env|
         [200, {'content-length'=>'2'}, ['OK']]
