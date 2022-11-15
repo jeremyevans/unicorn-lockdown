@@ -112,7 +112,7 @@ upstream test-app_unicorn {
 }
 server {
     server_name test-app;
-    access_log #{prefix}/var/log/nginx/test-app.access.log main;
+    access_log #{prefix}/var/log/nginx/test-app.access.log;
     error_log #{prefix}/var/log/nginx/test-app.error.log warn;
     root #{prefix}/var/www/test-app/public;
     error_page   500 503 /500.html;
@@ -190,7 +190,7 @@ upstream test-app2_unicorn {
 }
 server {
     server_name test-app2;
-    access_log #{prefix}/var/log/nginx/test-app2.access.log main;
+    access_log #{prefix}/var/log/nginx/test-app2.access.log;
     error_log #{prefix}/var/log/nginx/test-app2.error.log warn;
     root #{prefix}/var/www/ta/public;
     error_page   500 503 /500.html;

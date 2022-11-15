@@ -169,7 +169,7 @@ upstream #{app}_unicorn {
 }
 server {
     server_name #{app};
-    access_log #{nginx_access_log_file} main;
+    access_log #{nginx_access_log_file};
     error_log #{nginx_error_log_file} warn;
     root #{dir}/public;
     error_page   500 503 /500.html;
