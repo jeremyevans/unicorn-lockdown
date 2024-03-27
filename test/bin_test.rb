@@ -123,7 +123,6 @@ server {
     proxy_redirect    off;
     add_header X-Content-Type-Options nosniff;
     add_header X-Frame-Options deny;
-    add_header X-XSS-Protection "1; mode=block";
     try_files $uri @test-app_unicorn;
     location @test-app_unicorn {
         proxy_pass http://test-app_unicorn;
@@ -201,7 +200,6 @@ server {
     proxy_redirect    off;
     add_header X-Content-Type-Options nosniff;
     add_header X-Frame-Options deny;
-    add_header X-XSS-Protection "1; mode=block";
     try_files $uri @test-app2_unicorn;
     location @test-app2_unicorn {
         proxy_pass http://test-app2_unicorn;

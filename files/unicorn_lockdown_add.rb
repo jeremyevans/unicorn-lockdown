@@ -180,7 +180,6 @@ server {
     proxy_redirect    off;
     add_header X-Content-Type-Options nosniff;
     add_header X-Frame-Options deny;
-    add_header X-XSS-Protection "1; mode=block";
     try_files $uri @#{app}_unicorn;
     location @#{app}_unicorn {
         proxy_pass http://#{app}_unicorn;
