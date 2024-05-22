@@ -11,17 +11,17 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-12
-    name: 3.1
+    runs-on: ubuntu-latest
+    name: 3.2
     steps:
     - uses: actions/checkout@v4
     - name: OpenBSD Test
       id: test
-      uses: vmactions/openbsd-vm@v0
+      uses: vmactions/openbsd-vm@v1
       with:
         prepare: |
-          pkg_add ruby31-pledge ruby31-unicorn nginx
-          gem31 install -N mail roda minitest-global_expectations
+          pkg_add ruby32-pledge ruby32-unicorn nginx
+          gem32 install -N mail roda minitest-global_expectations
           groupadd _unicorn
         run: |
-          rake31 test_ci
+          rake32 test_ci
