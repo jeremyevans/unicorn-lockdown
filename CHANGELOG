@@ -1,3 +1,11 @@
+= 1.3.0 (2024-05-22)
+
+* Eagerly require strscan to avoid issues if it is lazy loaded by rack's multipart parser (jeremyevans)
+
+* Avoid string literal modifications to avoid warnings on Ruby 3.4 (jeremyevans)
+
+* Remove X-XSS-Protection from generated nginx files, as MDN now recommends against it (jeremyevans)
+
 = 1.2.0 (2022-11-16)
 
 * Remove access_log format from generated nginx configurations (jeremyevans)
