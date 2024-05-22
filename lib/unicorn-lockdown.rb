@@ -8,10 +8,13 @@
 require 'pledge'
 require 'unveil'
 
+# Eagerly require strscan, lazily loaded by rack's multipart parser
+require 'strscan'
+
 # Load common encodings
-"\255".force_encoding('ISO8859-1').encode('UTF-8')
-''.force_encoding('UTF-16LE')
-''.force_encoding('UTF-16BE')
+"\255".dup.force_encoding('ISO8859-1').encode('UTF-8')
+''.dup.force_encoding('UTF-16LE')
+''.dup.force_encoding('UTF-16BE')
 
 class Unicorn::HttpServer
   # The file name in which to store request information.
