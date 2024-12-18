@@ -13,7 +13,7 @@ desc "Run tests"
 task :test do
   ruby = ENV['RUBY'] ||= FileUtils::RUBY 
   ENV['UNICORN'] ||= ruby.sub('ruby', 'unicorn')
-  sh "#{ruby} #{"-w" if RUBY_VERSION >= '3'} test/all.rb"
+  sh "#{ruby} #{"-w" if RUBY_VERSION >= '3'} #{'-W:strict_unused_block' if RUBY_VERSION >= '3.4'} test/all.rb"
 end
 
 task :default => :test
